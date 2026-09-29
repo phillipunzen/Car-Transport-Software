@@ -215,7 +215,25 @@ export function OrderForm({
   );
 
   return (
-    <ActionForm action={action} className="space-y-6" onSubmitStart={() => { try { localStorage.removeItem(draftKey); } catch { /* ignorieren */ } }}>
+    <ActionForm
+      action={action}
+      className="space-y-6"
+      onSubmitStart={() => {
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* ignorieren */
+        }
+      }}
+      onQueued={() => {
+        // Ohne Netz: Entwurf auf dem Gerät behalten, falls die Seite geschlossen wird
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(v));
+        } catch {
+          /* ignorieren */
+        }
+      }}
+    >
       {orderId && <input type="hidden" name="id" value={orderId} />}
       <input type="hidden" name="vehicleId" value={v.vehicleId ?? ""} />
       <input type="hidden" name="durationMinutes" value={v.durationMinutes ?? ""} />

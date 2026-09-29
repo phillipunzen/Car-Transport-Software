@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireCtx } from "@/lib/org";
 import { ROLE } from "@/lib/labels";
 import { BottomNav, SettingsIconLink, SideNav } from "@/components/nav";
+import { SyncStatus } from "@/components/sync-status";
 import { logout, switchOrg } from "./actions";
 
 function OrgSwitcher({ current, memberships }: { current: string; memberships: { id: string; name: string }[] }) {
@@ -63,6 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </header>
 
       <main className="min-w-0 flex-1 px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-10">
+        <SyncStatus />
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
       <BottomNav />

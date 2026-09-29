@@ -3,7 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 
 /** Unterschriftenfeld für Finger, Stift oder Maus. Wert = PNG als Data-URL. */
-export function SignaturePad({ name, label, defaultValue }: { name: string; label: string; defaultValue?: string | null }) {
+export function SignaturePad({
+  name,
+  label,
+  defaultValue,
+  onChange,
+}: {
+  name: string;
+  label: string;
+  defaultValue?: string | null;
+  onChange?: (value: string) => void;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [value, setValue] = useState(defaultValue ?? "");
@@ -52,12 +62,15 @@ export function SignaturePad({ name, label, defaultValue }: { name: string; labe
   function end() {
     if (!drawing.current) return;
     drawing.current = false;
-    setValue(canvas.current!.toDataURL("image/png"));
+    const v = canvas.current!.toDataURL("image/png");
+    setValue(v);
+    onChange?.(v);
   }
   function clear() {
     const c = canvas.current!;
     c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
     setValue("");
+    onChange?.("");
   }
 
   return (

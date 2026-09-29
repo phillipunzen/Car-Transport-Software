@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { SignaturePad } from "@/components/signature-pad";
@@ -21,10 +21,119 @@ export type ProtocolValues = {
   signatureDriver: string | null;
 };
 
-export function ProtocolForm({ orderId, type, values, terms }: { orderId: string; type: "PICKUP" | "DELIVERY"; values: ProtocolValues; terms?: string | null }) {
-  const [fuel, setFuel] = useState(values.fuelLevel);
+type Props = { orderId: string; type: "PICKUP" | "DELIVERY"; values: ProtocolValues; terms?: string | null };
+
+/** Liest die aktuellen Formularwerte aus (für die Sicherung auf dem Gerät). */
+function readForm(form: HTMLFormElement, signatures: Partial<Record<"signatureCustomer" | "signatureDriver", string>>): ProtocolValues {
+  const fd = new FormData(form);
+  const get = (k: string) => (typeof fd.get(k) === "string" ? (fd.get(k) as string) : "");
+  const checklist: Record<string, boolean | number> = {};
+  for (const item of CHECKLIST_ITEMS) {
+    checklist[item.key] = item.kind === "count" ? Number(get(`cl_${item.key}`) || 0) : fd.get(`cl_${item.key}`) === "on";
+  }
+  return {
+    performedAt: get("performedAt"),
+    location: get("location"),
+    mileage: get("mileage"),
+    fuelLevel: Number(get("fuelLevel") || 0),
+    checklist,
+    exteriorClean: get("exteriorClean"),
+    interiorClean: get("interiorClean"),
+    notes: get("notes"),
+    handoverName: get("handoverName"),
+    signatureCustomer: signatures.signatureCustomer ?? (get("signatureCustomer") || null),
+    signatureDriver: signatures.signatureDriver ?? (get("signatureDriver") || null),
+  };
+}
+
+/**
+ * Protokollformular mit Sicherung auf dem Gerät: Eingaben inkl. Unterschriften
+ * überstehen Funklöcher, Neuladen und versehentliches Schließen.
+ */
+export function ProtocolForm(props: Props) {
+  const draftKey = `protocol-draft:${props.orderId}:${props.type}`;
+  const [values, setValues] = useState(props.values);
+  const [version, setVersion] = useState(0);
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        setValues(JSON.parse(raw));
+        setVersion((v) => v + 1);
+        setRestored(true);
+      }
+    } catch {
+      /* Speicher nicht verfügbar */
+    }
+  }, [draftKey]);
+
+  const save = useCallback(
+    (v: ProtocolValues) => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(v));
+      } catch {
+        /* z. B. Speicher voll – Formular funktioniert trotzdem */
+      }
+    },
+    [draftKey],
+  );
+  const clear = useCallback(() => {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* ignorieren */
+    }
+  }, [draftKey]);
+
   return (
-    <ActionForm action={saveProtocol} className="space-y-6">
+    <>
+      {restored && (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+          <span>Nicht gesendete Eingaben von diesem Gerät wurden wiederhergestellt (inkl. Unterschriften).</span>
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => {
+              clear();
+              setValues(props.values);
+              setVersion((v) => v + 1);
+              setRestored(false);
+            }}
+          >
+            Verwerfen
+          </button>
+        </div>
+      )}
+      <ProtocolFormInner key={version} {...props} values={values} onDraft={save} onSaved={clear} />
+    </>
+  );
+}
+
+function ProtocolFormInner({
+  orderId,
+  type,
+  values,
+  terms,
+  onDraft,
+  onSaved,
+}: Props & { onDraft: (v: ProtocolValues) => void; onSaved: () => void }) {
+  const [fuel, setFuel] = useState(values.fuelLevel);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const signatures = useRef<Partial<Record<"signatureCustomer" | "signatureDriver", string>>>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveDraft = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const form = wrapper.current?.closest("form");
+      if (form) onDraft(readForm(form, signatures.current));
+    }, 300);
+  }, [onDraft]);
+
+  return (
+    <ActionForm action={saveProtocol} className="space-y-6" onSuccess={onSaved} onQueued={saveDraft}>
+      <div ref={wrapper} className="space-y-6" onInput={saveDraft} onChange={saveDraft}>
       <input type="hidden" name="orderId" value={orderId} />
       <input type="hidden" name="type" value={type} />
 
@@ -127,10 +236,22 @@ export function ProtocolForm({ orderId, type, values, terms }: { orderId: string
         </div>
         {terms && <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{terms}</p>}
         <div className="grid gap-4 md:grid-cols-2">
-          <SignaturePad name="signatureCustomer" label={type === "PICKUP" ? "Unterschrift Kunde / Übergebender" : "Unterschrift Empfänger"} defaultValue={values.signatureCustomer} />
-          <SignaturePad name="signatureDriver" label="Unterschrift Fahrer" defaultValue={values.signatureDriver} />
+          <SignaturePad
+            onChange={(v) => {
+              signatures.current.signatureCustomer = v;
+              saveDraft();
+            }}
+            name="signatureCustomer" label={type === "PICKUP" ? "Unterschrift Kunde / Übergebender" : "Unterschrift Empfänger"} defaultValue={values.signatureCustomer} />
+          <SignaturePad
+            onChange={(v) => {
+              signatures.current.signatureDriver = v;
+              saveDraft();
+            }}
+            name="signatureDriver" label="Unterschrift Fahrer" defaultValue={values.signatureDriver} />
         </div>
       </section>
+
+      </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <SubmitButton name="intent" value="save" className="btn-secondary">

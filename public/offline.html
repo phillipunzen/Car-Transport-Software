@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline · Überführung</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; }
+  main { max-width: 26rem; padding: 2rem 1.5rem; text-align: center; }
+  img { width: 56px; height: 56px; }
+  h1 { font-size: 1.25rem; margin: 1rem 0 .5rem; }
+  p { color: #475569; line-height: 1.5; }
+  button { margin-top: 1rem; background: #1d64e0; color: #fff; border: 0; border-radius: .5rem; padding: .75rem 1.25rem; font-weight: 600; font-size: 1rem; }
+  #pending { font-weight: 600; color: #92400e; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icon.svg" alt="">
+  <h1>Keine Internetverbindung</h1>
+  <p>Diese Seite kann gerade nicht geladen werden. Bereits erfasste Fotos, Belege und Formulareingaben sind auf diesem Gerät gesichert und werden automatisch übertragen, sobald wieder Netz da ist.</p>
+  <p id="pending"></p>
+  <button onclick="location.reload()">Erneut versuchen</button>
+</main>
+<script>
+  window.addEventListener("online", () => location.reload());
+  try {
+    const req = indexedDB.open("ueberfuehrung-offline", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("queue", { keyPath: "id" });
+    req.onsuccess = () => {
+      const count = req.result.transaction("queue").objectStore("queue").count();
+      count.onsuccess = () => {
+        if (count.result) document.getElementById("pending").textContent = count.result + " Upload(s) warten auf Übertragung.";
+      };
+    };
+  } catch (e) {}
+</script>
+</body>
+</html>

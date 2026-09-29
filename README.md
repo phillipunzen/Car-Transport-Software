@@ -56,6 +56,13 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Stornierung erzeugt automatisch eine **Stornorechnung**
 - Zentrale Einstellungen: Firmenname, Adresse, Kontakt, Steuernummer/USt-IdNr., IBAN/BIC, Einleitungs- und Schlusstext, Protokoll-Hinweistext
 
+**Funkloch-sicher (Offline)**
+- Ohne Verbindung bleiben Formulareingaben erhalten und werden automatisch gesendet, sobald wieder Netz da ist
+- Protokolle inkl. Unterschriften werden zusätzlich auf dem Gerät gesichert (überstehen Neuladen/Schließen)
+- Fotos, Belege und Schäden landen offline in einer Warteschlange auf dem Gerät und werden später automatisch hochgeladen
+- Hinweisleiste mit ausstehenden Uploads, Offline-Seite statt Browser-Fehlermeldung
+- Nicht offline möglich: Seiten neu öffnen, Erkennung, Streckenberechnung, Rechnungen
+
 **Benutzer & Teams**
 - Registrierung per E-Mail/Passwort, **Login mit Google oder Apple**
 - Jede Registrierung erhält eine eigene **Instanz** (Firma); weitere Personen können per Einladungslink/E-Mail eingeladen werden
