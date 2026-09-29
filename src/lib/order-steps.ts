@@ -12,7 +12,18 @@ export type StepKey =
   | "invoice"
   | "payment";
 
-export type StepState = "done" | "current" | "open" | "skipped";
+// done = erledigt · waived = bewusst übersprungen · missed = offen geblieben, obwohl es weiterging
+export type StepState = "done" | "current" | "open" | "missed" | "waived";
+
+/** Schritte, die bewusst übersprungen werden dürfen (Protokolle nie – sie sind der Nachweis). */
+export const SKIPPABLE: Partial<Record<StepKey, string>> = {
+  prepare: "Ohne vollständige Daten fortfahren",
+  pickupPhotos: "Ohne Fotos fortfahren",
+  deliveryPhotos: "Ohne Fotos fortfahren",
+  invoice: "Keine Rechnung erforderlich",
+};
+
+export const isSkippable = (key: StepKey) => key in SKIPPABLE;
 
 export type Step = {
   key: StepKey;
@@ -41,7 +52,13 @@ export type OrderStepInput = {
   protocols: { PICKUP: "none" | "draft" | "done"; DELIVERY: "none" | "draft" | "done" };
   expenses: number;
   invoice: { status: "DRAFT" | "ISSUED" | "PAID"; number: string | null } | null;
+  skipped?: string[]; // bewusst übersprungene Schritte
 };
+
+/** Liest die gespeicherte Liste übersprungener Schritte (JSON-Feld) robust aus. */
+export function parseSkipped(value: unknown): StepKey[] {
+  return Array.isArray(value) ? (value.filter((v) => typeof v === "string" && isSkippable(v as StepKey)) as StepKey[]) : [];
+}
 
 /** Angaben, die für die Durchführung noch fehlen */
 export function missingOrderData(o: OrderStepInput) {
@@ -76,18 +93,24 @@ export function orderSteps(o: OrderStepInput): Step[] {
     { key: "payment", label: "Bezahlt", done: o.invoice?.status === "PAID" },
   ];
 
-  // Alles vor dem letzten erledigten Schritt, das nicht erledigt ist, gilt als übersprungen
-  const lastDone = raw.map((s) => s.done).lastIndexOf(true);
+  // Ohne Rechnung gibt es auch keine Zahlung
+  const waived = new Set(parseSkipped(o.skipped));
+  if (waived.has("invoice") && !o.invoice) waived.add("payment");
+  const isWaived = (key: StepKey) => waived.has(key);
+
+  // Alles vor dem letzten erledigten/übersprungenen Schritt, das nicht erledigt ist, gilt als "offen geblieben"
+  const lastDone = raw.map((s) => s.done || isWaived(s.key)).lastIndexOf(true);
   let currentSet = false;
   return raw.map((s, i) => {
     let state: StepState;
     if (s.done) state = "done";
-    else if (i < lastDone) state = "skipped";
+    else if (isWaived(s.key)) state = "waived";
+    else if (i < lastDone) state = "missed";
     else if (!currentSet) {
       state = "current";
       currentSet = true;
     } else state = "open";
-    return { key: s.key, label: s.label, state, detail: s.detail };
+    return { key: s.key, label: s.label, state, detail: state === "waived" ? "übersprungen" : s.detail };
   });
 }
 

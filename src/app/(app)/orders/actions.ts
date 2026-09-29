@@ -10,6 +10,17 @@ import { ORDER_STATUS } from "@/lib/labels";
 import { recognitionMode, recognizeVehicle } from "@/lib/recognition";
 import { deleteFile, saveUpload } from "@/lib/files";
 import { syncVehicle } from "@/lib/vehicles";
+import { isSkippable, parseSkipped, type StepKey } from "@/lib/order-steps";
+
+const ORDER_STEP_LABELS: Record<StepKey, string> = {
+  prepare: "Vorbereiten",
+  pickupPhotos: "Fotos Abholung",
+  pickupProtocol: "Abholprotokoll",
+  deliveryPhotos: "Fotos Übergabe",
+  deliveryProtocol: "Übergabeprotokoll",
+  invoice: "Rechnung",
+  payment: "Bezahlt",
+};
 import type { FormState } from "@/components/action-form";
 
 export async function logEvent(orderId: string, ctx: Ctx, message: string) {
@@ -199,4 +210,23 @@ export async function scanVehicle(formData: FormData): Promise<VehicleScanResult
     console.error("Fahrzeugerkennung fehlgeschlagen", e);
     return { error: "Die Erkennung ist fehlgeschlagen. Bitte Daten manuell eintragen." };
   }
+}
+
+/** Ablaufschritt bewusst überspringen bzw. das Überspringen rückgängig machen. */
+export async function setStepSkipped(formData: FormData) {
+  const ctx = await requireCtx();
+  const order = await requireOrder(ctx, String(formData.get("orderId")));
+  const step = String(formData.get("step")) as StepKey;
+  if (!isSkippable(step)) throw new Error("Dieser Schritt kann nicht übersprungen werden.");
+  const skip = formData.get("skip") === "1";
+  if (skip && step === "invoice" && (await db.invoice.count({ where: { orderId: order.id, status: { not: "CANCELLED" } } }))) {
+    throw new Error("Für diesen Auftrag existiert bereits eine Rechnung.");
+  }
+  const current = new Set(parseSkipped(order.skippedSteps));
+  if (skip) current.add(step);
+  else current.delete(step);
+  await db.order.update({ where: { id: order.id }, data: { skippedSteps: [...current] } });
+  const label = ORDER_STEP_LABELS[step];
+  await logEvent(order.id, ctx, skip ? `Schritt übersprungen: ${label}` : `Schritt wieder aufgenommen: ${label}`);
+  revalidatePath(`/orders/${order.id}`, "layout");
 }

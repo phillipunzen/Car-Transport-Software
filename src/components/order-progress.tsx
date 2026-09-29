@@ -2,9 +2,24 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { Step, StepKey } from "@/lib/order-steps";
+import { SKIPPABLE, type Step, type StepKey } from "@/lib/order-steps";
 import { SubmitButton } from "@/components/submit-button";
 import { createInvoiceFromOrder } from "@/app/(app)/invoices/actions";
+import { setStepSkipped } from "@/app/(app)/orders/actions";
+
+/** Kleiner Formular-Button: Schritt überspringen bzw. wieder aufnehmen */
+function SkipButton({ orderId, step, skip, label, confirm, className }: { orderId: string; step: StepKey; skip: boolean; label: string; confirm?: string; className: string }) {
+  return (
+    <form action={setStepSkipped} className="inline">
+      <input type="hidden" name="orderId" value={orderId} />
+      <input type="hidden" name="step" value={step} />
+      <input type="hidden" name="skip" value={skip ? "1" : "0"} />
+      <SubmitButton className={className} pendingText="…" confirm={confirm}>
+        {label}
+      </SubmitButton>
+    </form>
+  );
+}
 
 type Props = {
   orderId: string;
@@ -77,12 +92,13 @@ function StepDot({ step, index }: { step: Step; index: number }) {
   const styles = {
     done: "bg-emerald-500 text-white border-emerald-500",
     current: "bg-brand-600 text-white border-brand-600 ring-4 ring-brand-100",
-    skipped: "bg-amber-100 text-amber-700 border-amber-300",
+    missed: "bg-amber-100 text-amber-700 border-amber-300",
+    waived: "bg-slate-100 text-slate-400 border-slate-300 border-dashed",
     open: "bg-white text-slate-400 border-slate-300",
   }[step.state];
   return (
     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${styles}`}>
-      {step.state === "done" ? "✓" : step.state === "skipped" ? "!" : index + 1}
+      {step.state === "done" ? "✓" : step.state === "missed" ? "!" : step.state === "waived" ? "–" : index + 1}
     </span>
   );
 }
@@ -92,7 +108,9 @@ export function OrderProgress({ orderId, steps, invoiceId, invoiceNumber, expens
   const path = usePathname();
   const search = useSearchParams();
   const current = steps.find((s) => s.state === "current");
-  const doneCount = steps.filter((s) => s.state === "done").length;
+  const doneCount = steps.filter((s) => s.state === "done" || s.state === "waived").length;
+  const missed = steps.filter((s) => s.state === "missed");
+  const waived = steps.filter((s) => s.state === "waived" && s.key !== "payment");
 
   if (cancelled) {
     return <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Dieser Auftrag wurde storniert.</div>;
@@ -120,7 +138,11 @@ export function OrderProgress({ orderId, steps, invoiceId, invoiceNumber, expens
             >
               <StepDot step={s} index={i} />
               {/* Auf dem Smartphone nur Punkte – die Erklärung steht im Kasten darunter */}
-              <span className={`sr-only text-[11px] leading-tight sm:not-sr-only ${s.state === "current" ? "font-semibold text-brand-700" : "text-slate-600"}`}>
+              <span
+                className={`sr-only text-[11px] leading-tight sm:not-sr-only ${
+                  s.state === "current" ? "font-semibold text-brand-700" : s.state === "waived" ? "text-slate-400 line-through" : "text-slate-600"
+                }`}
+              >
                 {s.label}
               </span>
             </Link>
@@ -144,11 +166,8 @@ export function OrderProgress({ orderId, steps, invoiceId, invoiceNumber, expens
                 {current.key === "payment" && invoiceNumber ? `Rechnung ${invoiceNumber} ist offen. ` : ""}
                 {current.key === "invoice" && invoiceId ? "Der Rechnungsentwurf muss noch geprüft und festgeschrieben werden." : TEXT[current.key].text}
               </p>
-              {steps.some((s) => s.state === "skipped") && (
-                <p className="mt-1 text-xs text-amber-700">
-                  ! Noch offen aus früheren Schritten: {steps.filter((s) => s.state === "skipped").map((s) => s.label).join(", ")}
-                </p>
-              )}
+              <MissedList steps={missed} orderId={orderId} invoiceId={invoiceId} />
+              <WaivedList steps={waived} orderId={orderId} />
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:items-end">
               {here(current.key) ? (
@@ -165,10 +184,15 @@ export function OrderProgress({ orderId, steps, invoiceId, invoiceNumber, expens
                   {current.key === "invoice" ? "Rechnung prüfen" : TEXT[current.key].button} →
                 </Link>
               )}
-              {current.key === "prepare" && (
-                <Link href={target("pickupPhotos", orderId, invoiceId)} className="text-center text-xs text-slate-500 hover:text-slate-800">
-                  Überspringen – direkt mit der Abholung beginnen
-                </Link>
+              {SKIPPABLE[current.key] && !(current.key === "invoice" && invoiceId) && (
+                <SkipButton
+                  orderId={orderId}
+                  step={current.key}
+                  skip
+                  label={`${SKIPPABLE[current.key]} →`}
+                  confirm={current.key === "invoice" ? "Für diesen Auftrag keine Rechnung erstellen?" : `Schritt „${current.label}“ überspringen?`}
+                  className="w-full text-center text-xs text-slate-500 hover:text-slate-800 sm:w-auto"
+                />
               )}
               {current.key === "invoice" && !invoiceId && (
                 <Link href={`/orders/${orderId}/expenses`} className="text-center text-xs text-slate-500 hover:text-slate-800">
@@ -180,10 +204,50 @@ export function OrderProgress({ orderId, steps, invoiceId, invoiceNumber, expens
         ) : (
           <div>
             <p className="font-semibold text-emerald-700">✓ Auftrag abgeschlossen</p>
-            <p className="text-sm text-slate-600">Alle Schritte sind erledigt und die Rechnung ist bezahlt.</p>
+            <p className="text-sm text-slate-600">
+              {steps.find((s) => s.key === "invoice")?.state === "waived"
+                ? "Alle Schritte sind erledigt – für diesen Auftrag ist keine Rechnung erforderlich."
+                : "Alle Schritte sind erledigt und die Rechnung ist bezahlt."}
+            </p>
+            <MissedList steps={missed} orderId={orderId} invoiceId={invoiceId} />
+            <WaivedList steps={waived} orderId={orderId} />
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+/** Bewusst übersprungene Schritte mit Möglichkeit zum Rückgängigmachen */
+function WaivedList({ steps, orderId }: { steps: Step[]; orderId: string }) {
+  if (steps.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+      <span>Übersprungen:</span>
+      {steps.map((s) => (
+        <span key={s.key} className="flex items-center gap-1">
+          {s.key === "invoice" ? "Rechnung (keine erforderlich)" : s.label}
+          <SkipButton orderId={orderId} step={s.key} skip={false} label="(rückgängig)" className="text-brand-600 hover:underline" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Offen gebliebene Schritte – verlinkt, überspringbare können ignoriert werden */
+function MissedList({ steps, orderId, invoiceId }: { steps: Step[]; orderId: string; invoiceId: string | null }) {
+  if (steps.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-amber-700">
+      <span>! Noch offen aus früheren Schritten:</span>
+      {steps.map((m) => (
+        <span key={m.key} className="flex items-center gap-1">
+          <Link href={target(m.key, orderId, invoiceId)} className="underline">
+            {m.label}
+          </Link>
+          {SKIPPABLE[m.key] && <SkipButton orderId={orderId} step={m.key} skip label="(ignorieren)" className="text-slate-500 hover:text-slate-800" />}
+        </span>
+      ))}
+    </div>
   );
 }

@@ -6,7 +6,8 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 
 **Geführter Ablauf je Auftrag**
 - Schrittleiste oben in jedem Auftrag: Vorbereiten → Fotos Abholung → Abholprotokoll → Fotos Übergabe → Übergabeprotokoll → Rechnung → Bezahlt
-- Ein Hinweis „Nächster Schritt“ mit genau einer Schaltfläche führt direkt zur richtigen Stelle; übersprungene Schritte werden markiert
+- Ein Hinweis „Nächster Schritt“ mit genau einer Schaltfläche führt direkt zur richtigen Stelle
+- Schritte bewusst überspringen (rückgängig machbar, im Verlauf protokolliert): Vorbereiten, Fotos bei Abholung/Übergabe und „Keine Rechnung erforderlich“. Die Protokolle lassen sich nicht überspringen. Vergessene Schritte werden gesondert markiert und können nachträglich ignoriert werden
 
 **Kunden & Aufträge**
 - Kundenverwaltung (Firma/Privat) mit fortlaufenden Kundennummern

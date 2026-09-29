@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { customerName, orderNo, toNumber } from "@/lib/format";
-import { missingOrderData, orderSteps, type OrderStepInput } from "@/lib/order-steps";
+import { missingOrderData, orderSteps, parseSkipped, type OrderStepInput } from "@/lib/order-steps";
 import { ORDER_STATUS } from "@/lib/labels";
 import { Badge, PageHeader } from "@/components/ui";
 import { OrderTabs } from "@/components/order-tabs";
@@ -41,6 +41,7 @@ export default async function OrderLayout({ children, params }: { children: Reac
     protocols: { PICKUP: protocolState("PICKUP"), DELIVERY: protocolState("DELIVERY") },
     expenses: order._count.expenses,
     invoice: invoice ? { status: invoice.status as "DRAFT" | "ISSUED" | "PAID", number: invoice.number } : null,
+    skipped: parseSkipped(order.skippedSteps),
   };
   const vehicle = [order.make, order.model].filter(Boolean).join(" ");
   return (

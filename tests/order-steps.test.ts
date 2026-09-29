@@ -40,9 +40,36 @@ describe("Auftragsablauf", () => {
     expect(currentStep(orderSteps({ ...base, photos: { PICKUP: 6, DELIVERY: 0 } }))?.key).toBe("pickupProtocol");
   });
 
-  it("übersprungene Schritte werden markiert", () => {
+  it("offen gebliebene Schritte werden markiert", () => {
     const o = { ...base, price: 0, protocols: { PICKUP: "done", DELIVERY: "none" } } as OrderStepInput;
-    expect(states(o)).toEqual(["skipped", "skipped", "done", "current", "open", "open", "open"]);
+    expect(states(o)).toEqual(["missed", "missed", "done", "current", "open", "open", "open"]);
+  });
+
+  it("bewusst übersprungene Fotos: weiter mit dem Protokoll", () => {
+    const o = { ...base, skipped: ["pickupPhotos"] };
+    expect(states(o)).toEqual(["done", "waived", "current", "open", "open", "open", "open"]);
+  });
+
+  it("Protokolle lassen sich nicht überspringen", () => {
+    const o = { ...base, skipped: ["pickupProtocol", "unsinn"] };
+    expect(currentStep(orderSteps(o))?.key).toBe("pickupPhotos");
+    expect(orderSteps(o)[2].state).toBe("open");
+  });
+
+  it("keine Rechnung erforderlich: Auftrag ist nach der Übergabe fertig", () => {
+    const o: OrderStepInput = {
+      ...base,
+      photos: { PICKUP: 4, DELIVERY: 4 },
+      protocols: { PICKUP: "done", DELIVERY: "done" },
+      skipped: ["invoice"],
+    };
+    expect(states(o).slice(5)).toEqual(["waived", "waived"]);
+    expect(currentStep(orderSteps(o))).toBeNull();
+  });
+
+  it("später doch erledigt: erledigt hat Vorrang", () => {
+    const o = { ...base, skipped: ["pickupPhotos"], photos: { PICKUP: 3, DELIVERY: 0 } };
+    expect(orderSteps(o)[1].state).toBe("done");
   });
 
   it("Rechnungsentwurf zählt noch nicht als erledigt", () => {

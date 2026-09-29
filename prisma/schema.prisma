@@ -326,6 +326,7 @@ model Order {
   // Abrechnung
   distanceKm      Decimal?    @db.Decimal(10, 1)
   durationMinutes Int? // geschätzte Fahrzeit laut Routenberechnung
+  skippedSteps    Json? // bewusst übersprungene Ablaufschritte, z. B. ["pickupPhotos"]
   pricingType     PricingType @default(FLAT)
   price           Decimal?    @db.Decimal(10, 2) // Pauschale (netto)
   pricePerKm      Decimal?    @db.Decimal(10, 2)
