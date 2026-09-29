@@ -1,0 +1,46 @@
+# Startet App + MySQL. Konfiguration über eine .env-Datei (siehe .env.example).
+#   docker compose up -d --build
+# Mehrere App-Instanzen: STORAGE_DRIVER=s3 setzen und
+#   docker compose up -d --scale app=3
+# (dann einen Load-Balancer/Reverse-Proxy vor die Instanzen schalten)
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cartransport
+      MYSQL_USER: app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app-password-aendern}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-password-aendern}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root-password-aendern}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    image: car-transport-software:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: mysql://app:${MYSQL_PASSWORD:-app-password-aendern}@db:3306/cartransport
+      AUTH_TRUST_HOST: "true"
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+
+volumes:
+  db-data:
+  uploads:
