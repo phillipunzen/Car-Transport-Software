@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
 import { customerName, formatDateTime, formatMoney, formatNumber, toNumber } from "@/lib/format";
@@ -8,13 +7,6 @@ import { INVOICE_STATUS, ORDER_STATUS, TRANSPORT_MODE } from "@/lib/labels";
 import { Badge, Card, Dl } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteOrder, setOrderStatus } from "../actions";
-import { createInvoiceFromOrder } from "../../invoices/actions";
-
-const NEXT_STEPS: Partial<Record<OrderStatus, { status: OrderStatus; label: string }[]>> = {
-  DRAFT: [{ status: "PLANNED", label: "Als geplant markieren" }],
-  PLANNED: [{ status: "IN_TRANSIT", label: "Fahrzeug abgeholt" }],
-  IN_TRANSIT: [{ status: "DELIVERED", label: "Fahrzeug zugestellt" }],
-};
 
 function Address({ o, p }: { o: Record<string, unknown>; p: "pickup" | "delivery" }) {
   const g = (k: string) => (o[`${p}${k}`] as string | null) ?? null;
@@ -67,80 +59,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     [order.pickupStreet, order.pickupZip, order.pickupCity].filter(Boolean).join(" "),
     [order.deliveryStreet, order.deliveryZip, order.deliveryCity].filter(Boolean).join(" "),
   ];
-  const openInvoice = order.invoices.find((i) => i.status !== "CANCELLED");
-
-  // Was fehlt noch? (Auftrag kann im Büro vorbereitet und vor Ort vervollständigt werden)
-  const missing = [
-    !order.licensePlate && "Kennzeichen",
-    !order.vin && "Fahrgestellnummer",
-    !order.make && !order.model && "Marke / Modell",
-    !(order.pickupStreet && (order.pickupZip || order.pickupCity)) && "Abholadresse",
-    !(order.deliveryStreet && (order.deliveryZip || order.deliveryCity)) && "Zustelladresse",
-    !order.pickupDate && "Abholtermin",
-    !order.assignedToId && "Fahrer",
-    !price && "Preis",
-  ].filter((m): m is string => Boolean(m));
-  const active = !["INVOICED", "CANCELLED"].includes(order.status);
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
-        {active && missing.length > 0 && (
-          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-amber-900">
-              <p className="font-semibold">Noch offen</p>
-              <p>{missing.join(" · ")}</p>
-            </div>
-            <Link href={`/orders/${order.id}/edit`} className="btn-secondary shrink-0">
-              Jetzt ergänzen
-            </Link>
-          </div>
-        )}
-        <Card title="Ablauf">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(["PICKUP", "DELIVERY"] as const).map((stage) => {
-              const p = order.protocols.find((x) => x.type === stage);
-              return (
-                <Link
-                  key={stage}
-                  href={`/orders/${order.id}/protocol/${stage.toLowerCase()}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:border-brand-500/50"
-                >
-                  <span>
-                    <span className="block text-sm font-semibold">{stage === "PICKUP" ? "Abholprotokoll" : "Übergabeprotokoll"}</span>
-                    <span className="text-xs text-slate-500">
-                      {p?.completedAt ? `Abgeschlossen ${formatDateTime(p.completedAt)}` : p ? "In Bearbeitung" : "Noch nicht begonnen"}
-                    </span>
-                  </span>
-                  <span className={`text-lg ${p?.completedAt ? "text-emerald-600" : "text-slate-300"}`}>{p?.completedAt ? "✔" : "○"}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {NEXT_STEPS[order.status]?.map((s) => (
-              <form key={s.status} action={setOrderStatus}>
-                <input type="hidden" name="id" value={order.id} />
-                <input type="hidden" name="status" value={s.status} />
-                <SubmitButton className="btn-secondary">{s.label}</SubmitButton>
-              </form>
-            ))}
-            {!openInvoice && order.status !== "CANCELLED" && (
-              <form action={createInvoiceFromOrder}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <SubmitButton className="btn-primary" pendingText="Rechnung wird erstellt…">
-                  Rechnung erstellen
-                </SubmitButton>
-              </form>
-            )}
-            {openInvoice && (
-              <Link href={`/invoices/${openInvoice.id}`} className="btn-primary">
-                Rechnung {openInvoice.number ?? "(Entwurf)"} öffnen
-              </Link>
-            )}
-          </div>
-        </Card>
-
         <Card title="Fahrzeug" actions={<Link href={`/orders/${order.id}/edit`} className="text-sm font-medium text-brand-600">Bearbeiten</Link>}>
           <Dl
             items={[

@@ -4,6 +4,10 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 
 ## Funktionen
 
+**Geführter Ablauf je Auftrag**
+- Schrittleiste oben in jedem Auftrag: Vorbereiten → Fotos Abholung → Abholprotokoll → Fotos Übergabe → Übergabeprotokoll → Rechnung → Bezahlt
+- Ein Hinweis „Nächster Schritt“ mit genau einer Schaltfläche führt direkt zur richtigen Stelle; übersprungene Schritte werden markiert
+
 **Kunden & Aufträge**
 - Kundenverwaltung (Firma/Privat) mit fortlaufenden Kundennummern
 - Aufträge mit Abhol-/Zustelladresse, Terminen, Ansprechpartnern, Fahrerzuweisung, Referenz, Überführungsart (eigene Achse, Anhänger, LKW)
