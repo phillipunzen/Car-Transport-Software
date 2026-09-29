@@ -42,6 +42,12 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - **Automatisches Auslesen** von Aussteller, Datum, Betrag, USt-Satz und Kategorie (lokal per OCR oder per KI)
 - Kennzeichnung „weiterberechnen“ – fließt automatisch in die Rechnung ein
 
+**Belege & Dokumente (Archiv)**
+- Zentrale Übersicht aller Belege aus Aufträgen und aller Fahrzeugdokumente (z. B. Fahrzeugschein)
+- Automatische Tags aus dem Auftrag: Kunde, Kennzeichen, Auftragsnummer, Kategorie – anklickbar zum Filtern
+- Suche, Filter nach Kunde, Kennzeichen, Kategorie, Zeitraum und Typ; Summen der gefilterten Belege
+- Export der gefilterten Belege als ZIP (sprechende Dateinamen + Übersicht.csv) oder CSV – z. B. für den Steuerberater
+
 **Rechnungen**
 - Rechnung per Klick aus dem Auftrag (Überführungsleistung + weiterberechnete Auslagen netto)
 - Frei bearbeitbarer Entwurf, dann **Festschreiben** mit fortlaufender Rechnungsnummer (z. B. `RE-2026-0001`)

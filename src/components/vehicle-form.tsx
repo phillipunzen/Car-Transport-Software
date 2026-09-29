@@ -33,6 +33,7 @@ export function VehicleForm({
   const [v, setV] = useState<Record<Key, string>>(() => Object.fromEntries(FIELDS.map(([k]) => [k, vehicle?.[k] ?? ""])) as Record<Key, string>);
   // Dokumente (z. B. Fahrzeugschein), die mit dem Formular gespeichert werden
   const [docs, setDocs] = useState<File[]>([]);
+  const [preparing, setPreparing] = useState(false);
   const hiddenFiles = useRef<HTMLInputElement>(null);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -45,9 +46,14 @@ export function VehicleForm({
 
   async function addDocs(list: FileList | null) {
     if (!list?.length) return;
-    const prepared = await Promise.all(Array.from(list).map((f) => prepareUpload(f, 2400, 0.85)));
-    setDocs((d) => [...d, ...prepared].slice(0, 5));
-    if (picker.current) picker.current.value = "";
+    setPreparing(true);
+    try {
+      const prepared = await Promise.all(Array.from(list).map((f) => prepareUpload(f, 2400, 0.85)));
+      setDocs((d) => [...d, ...prepared].slice(0, 5));
+    } finally {
+      setPreparing(false);
+      if (picker.current) picker.current.value = "";
+    }
   }
 
   return (
@@ -128,7 +134,7 @@ export function VehicleForm({
         )}
       </div>
 
-      <SubmitButton>{vehicle ? "Speichern" : "Fahrzeug anlegen"}</SubmitButton>
+      <SubmitButton disabled={preparing}>{preparing ? "Dokument wird vorbereitet…" : vehicle ? "Speichern" : "Fahrzeug anlegen"}</SubmitButton>
     </ActionForm>
   );
 }
