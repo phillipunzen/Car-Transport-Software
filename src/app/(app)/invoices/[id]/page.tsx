@@ -8,6 +8,8 @@ import { computeTotals } from "@/lib/invoice";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { SubmitButton } from "@/components/submit-button";
+import { EmailDocuments } from "@/components/email-documents";
+import { emailDocumentsProps } from "@/lib/email-docs";
 import { cancelInvoice, deleteDraft, setPaid } from "../actions";
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +17,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const invoice = await db.invoice.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { customer: true, order: true, items: { orderBy: { position: "asc" } } },
+    include: { customer: true, order: { include: { protocols: true } }, items: { orderBy: { position: "asc" } } },
   });
   if (!invoice) notFound();
 
@@ -183,15 +185,20 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </Card>
           <Card title="Empfänger">
             <p className="whitespace-pre-wrap text-sm">{invoice.recipient}</p>
-            {invoice.customer.email && (
-              <a
-                href={`mailto:${invoice.customer.email}?subject=${encodeURIComponent(`Rechnung ${invoice.number}`)}&body=${encodeURIComponent(
-                  `Guten Tag,\n\nanbei erhalten Sie unsere Rechnung ${invoice.number} über ${formatMoney(invoice.grossTotal)}.\n\nMit freundlichen Grüßen\n${ctx.org.companyName ?? ctx.org.name}`,
-                )}`}
-                className="btn-secondary mt-3 w-full"
-              >
-                ✉️ Per E-Mail senden
-              </a>
+            {invoice.status !== "CANCELLED" && (
+              <div className="mt-3">
+                <EmailDocuments
+                  className="btn-primary w-full"
+                  {...emailDocumentsProps({
+                    org: ctx.org,
+                    order: invoice.order,
+                    customer: invoice.customer,
+                    protocols: invoice.order?.protocols ?? [],
+                    invoice,
+                    focus: "invoice",
+                  })}
+                />
+              </div>
             )}
           </Card>
         </div>

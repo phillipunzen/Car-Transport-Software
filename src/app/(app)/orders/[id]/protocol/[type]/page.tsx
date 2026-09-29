@@ -7,6 +7,8 @@ import { CHECKLIST_ITEMS, CLEANLINESS, DAMAGE_AREAS, DAMAGE_SEVERITY, DAMAGE_TYP
 import { Card, Dl } from "@/components/ui";
 import { ProtocolForm } from "@/components/protocol-form";
 import { SubmitButton } from "@/components/submit-button";
+import { EmailDocuments } from "@/components/email-documents";
+import { emailDocumentsProps } from "@/lib/email-docs";
 import { reopenProtocol } from "../actions";
 
 export default async function ProtocolPage({ params }: { params: Promise<{ id: string; type: string }> }) {
@@ -56,10 +58,14 @@ export default async function ProtocolPage({ params }: { params: Promise<{ id: s
           <p className="text-sm text-emerald-800">
             ✔ {title} abgeschlossen am {formatDateTime(protocol.completedAt)}
           </p>
-          <div className="flex gap-2">
-            <a href={`/api/orders/${order.id}/protocol/${rawType}/pdf`} target="_blank" rel="noreferrer" className="btn-primary">
+          <div className="flex flex-wrap gap-2">
+            <a href={`/api/orders/${order.id}/protocol/${rawType}/pdf`} target="_blank" rel="noreferrer" className="btn-secondary">
               PDF herunterladen
             </a>
+            <EmailDocuments
+              className="btn-primary"
+              {...emailDocumentsProps({ org: ctx.org, order, customer: order.customer, protocols: order.protocols, invoice: null, focus: "protocols" })}
+            />
             {canManage(ctx.role) && (
               <form action={reopenProtocol}>
                 <input type="hidden" name="orderId" value={order.id} />

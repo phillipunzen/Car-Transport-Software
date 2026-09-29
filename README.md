@@ -35,6 +35,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Abhol- und Übergabeprotokoll mit Datum, Ort, Kilometerstand, Tank-/Ladestand, Sauberkeit, Zubehör-Checkliste (Schlüssel, Papiere, Warndreieck, Ladekabel …) und Bemerkungen
 - **Digitale Unterschrift** von Kunde/Empfänger und Fahrer (Finger, Stift, Maus)
 - PDF mit Schadensskizze, Schadensliste, Unterschriften und Fotodokumentation
+- **Per E-Mail an den Kunden senden:** Abhol-/Übergabeprotokoll (und Rechnung) als PDF-Anhang direkt aus der App – Empfänger, Betreff und Text vorbelegt, Versand wird im Verlauf protokolliert
 - Abschluss setzt den Auftragsstatus automatisch weiter
 
 **Belege & Spesen**
@@ -113,7 +114,7 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 | `OCR_ENABLED` | Lokale OCR an/aus (Standard: an) |
 | `GEO_ENABLED`, `GEOCODER_URL`, `ROUTING_URL`, `ORS_API_KEY` | Standort- und Streckenberechnung (siehe unten) |
 | `STORAGE_DRIVER` | `local` oder `s3` |
-| `SMTP_*` | E-Mail-Versand für Einladungen (optional – sonst wird ein Link angezeigt) |
+| `SMTP_*` | E-Mail-Versand für Einladungen, Protokolle und Rechnungen (optional – ohne SMTP: PDF-Download + vorbereitete E-Mail im eigenen Mailprogramm) |
 
 ### Google-Login einrichten
 In der [Google Cloud Console](https://console.cloud.google.com/apis/credentials) eine OAuth-Client-ID (Webanwendung) anlegen. Autorisierte Weiterleitungs-URI: `https://<deine-domain>/api/auth/callback/google`.

@@ -6,6 +6,8 @@ import { customerName, formatDateTime, formatMoney, formatNumber, toNumber } fro
 import { INVOICE_STATUS, ORDER_STATUS, TRANSPORT_MODE } from "@/lib/labels";
 import { Badge, Card, Dl } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
+import { EmailDocuments } from "@/components/email-documents";
+import { emailDocumentsProps } from "@/lib/email-docs";
 import { deleteOrder, setOrderStatus } from "../actions";
 
 function Address({ o, p }: { o: Record<string, unknown>; p: "pickup" | "delivery" }) {
@@ -112,6 +114,22 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <div className="space-y-6">
+        {(order.protocols.some((p) => p.completedAt) || order.invoices.some((i) => i.status !== "DRAFT")) && (
+          <Card title="Dokumente an Kunden">
+            <p className="mb-3 text-sm text-slate-600">Protokolle{order.invoices.length ? " und Rechnung" : ""} als PDF direkt per E-Mail senden.</p>
+            <EmailDocuments
+              className="btn-primary w-full"
+              {...emailDocumentsProps({
+                org: ctx.org,
+                order,
+                customer: order.customer,
+                protocols: order.protocols,
+                invoice: order.invoices.find((i) => i.status !== "CANCELLED") ?? null,
+                focus: "protocols",
+              })}
+            />
+          </Card>
+        )}
         <Card title="Details">
           <Dl
             items={[
