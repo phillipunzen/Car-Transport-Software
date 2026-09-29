@@ -8,8 +8,16 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Kundenverwaltung (Firma/Privat) mit fortlaufenden Kundennummern
 - Aufträge mit Abhol-/Zustelladresse, Terminen, Ansprechpartnern, Fahrerzuweisung, Referenz, Überführungsart (eigene Achse, Anhänger, LKW)
 - Preis pauschal oder pro Kilometer, Status-Workflow (Angelegt → Geplant → Unterwegs → Zugestellt → Abgerechnet), Verlauf je Auftrag
+- Aufträge im Büro vorbereiten und vor Ort vervollständigen: nur der Kunde ist Pflicht, „Zwischenspeichern“, Hinweis auf noch fehlende Angaben, Eingaben werden zusätzlich lokal auf dem Gerät gesichert (Funkloch/Neuladen)
+- Adressen per Knopfdruck vom Kunden übernehmen oder über den **aktuellen Standort** (GPS) ermitteln
+- **Automatische Streckenberechnung** (km & Fahrzeit) aus Abhol- und Zieladresse – jederzeit überschreibbar
 - Filter (aktiv, unterwegs, abzurechnen, „Meine“) und Suche nach Kennzeichen, FIN, Kunde, Ort
 - Direktlinks zu Google Maps (Adresse & Route) und Telefon
+
+**Fahrzeugbestand**
+- Übersicht aller bekannten Fahrzeuge – wird beim Speichern von Aufträgen automatisch gepflegt (Zuordnung über FIN, sonst Kennzeichen)
+- Beim Anlegen eines Auftrags bekanntes Fahrzeug suchen und übernehmen; bei Eingabe einer bekannten FIN/eines Kennzeichens erscheint ein Übernahme-Hinweis
+- Fahrzeugdetails mit Auftragshistorie, letztem Kilometerstand und zuletzt dokumentierten Schäden
 
 **Fahrzeug & Zustand**
 - Fotos direkt aus der Handykamera, getrennt nach *Abholung* und *Übergabe*, mit Kategorien (Front, Heck, Innenraum, Tacho, FIN …); Bilder werden vor dem Upload im Browser verkleinert
@@ -84,6 +92,7 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 | `AUTH_APPLE_ID/SECRET` | Apple-Login (optional) |
 | `ANTHROPIC_API_KEY` | Schaltet die Erkennung von lokaler OCR auf KI um (optional) |
 | `OCR_ENABLED` | Lokale OCR an/aus (Standard: an) |
+| `GEO_ENABLED`, `GEOCODER_URL`, `ROUTING_URL`, `ORS_API_KEY` | Standort- und Streckenberechnung (siehe unten) |
 | `STORAGE_DRIVER` | `local` oder `s3` |
 | `SMTP_*` | E-Mail-Versand für Einladungen (optional – sonst wird ein Link angezeigt) |
 
@@ -109,6 +118,12 @@ Die Anwendung wählt die Erkennungsmethode automatisch:
 | Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
 
 Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen gerade, scharf und formatfüllend fotografieren. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
+
+### Standort & Streckenberechnung
+
+„📍 Mein Standort“ nutzt das GPS des Geräts (Browser fragt nach Erlaubnis, funktioniert nur über **HTTPS**) und ermittelt daraus die Adresse. Die Strecke wird automatisch berechnet, sobald bei Abholung und Zustellung PLZ oder Ort eingetragen sind.
+
+Standardmäßig werden die freien OpenStreetMap-Dienste verwendet ([Nominatim](https://nominatim.org) & [OSRM](https://project-osrm.org)). Deren öffentliche Server sind nur für geringe Nutzung gedacht – für den Produktivbetrieb empfiehlt sich ein eigener Server (`GEOCODER_URL`, `ROUTING_URL`) oder ein kostenloser [OpenRouteService](https://openrouteservice.org)-Schlüssel (`ORS_API_KEY`). An diese Dienste werden nur Adressen bzw. Koordinaten übermittelt, keine Kunden- oder Fahrzeugdaten. Mit `GEO_ENABLED=false` lassen sich die Funktionen abschalten.
 
 ## Lokale Entwicklung
 

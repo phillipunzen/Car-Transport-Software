@@ -52,11 +52,7 @@ export function VehicleScan({
           <span className="font-semibold">Automatisch erkennen:</span>{" "}
           {mode === "ai"
             ? "Foto von Fahrzeug/Kennzeichen, FIN oder Fahrzeugschein aufnehmen."
-            : "Kennzeichen, FIN oder Fahrzeugschein formatfüllend fotografieren."}
-          <span className="mt-0.5 block text-xs text-slate-500">
-            {mode === "ai" ? "Erkennung per KI (Claude)" : "Lokale Texterkennung – Bilder verlassen deinen Server nicht"}
-          </span>
-        </p>
+            : "Kennzeichen, FIN oder Fahrzeugschein formatfüllend fotografieren."}        </p>
         <button type="button" className="btn-primary shrink-0" disabled={busy} onClick={() => input.current?.click()}>
           {busy ? "Wird ausgelesen…" : "📷 Foto auslesen"}
         </button>

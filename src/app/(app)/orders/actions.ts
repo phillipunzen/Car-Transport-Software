@@ -9,6 +9,7 @@ import { decimal, fromDateTimeLocal, str } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
 import { recognitionMode, recognizeVehicle } from "@/lib/recognition";
 import { deleteFile, saveUpload } from "@/lib/files";
+import { syncVehicle } from "@/lib/vehicles";
 import type { FormState } from "@/components/action-form";
 
 export async function logEvent(orderId: string, ctx: Ctx, message: string) {
@@ -54,6 +55,10 @@ async function orderData(ctx: Ctx, formData: FormData) {
     firstRegistration: str(formData.get("firstRegistration")),
     vehicleType: str(formData.get("vehicleType")),
     distanceKm: decimal(formData.get("distanceKm")),
+    durationMinutes: (() => {
+      const m = decimal(formData.get("durationMinutes"));
+      return m === null ? null : Math.round(m);
+    })(),
     pricingType,
     price: decimal(formData.get("price")),
     pricePerKm: decimal(formData.get("pricePerKm")),
@@ -73,10 +78,12 @@ export async function createOrder(_: FormState, formData: FormData): Promise<For
   } catch (e) {
     return { error: (e as Error).message };
   }
+  const vehicleId = await syncVehicle(ctx.orgId, customer.id, data, str(formData.get("vehicleId")));
   const number = await nextNumber(ctx.orgId, "nextOrderNumber");
   const order = await db.order.create({
     data: {
       ...data,
+      vehicleId,
       organizationId: ctx.orgId,
       customerId: customer.id,
       number,
@@ -85,22 +92,41 @@ export async function createOrder(_: FormState, formData: FormData): Promise<For
     },
   });
   await logEvent(order.id, ctx, "Auftrag angelegt");
-  redirect(`/orders/${order.id}`);
+  // "Anlegen & weiter bearbeiten": direkt im Formular bleiben (z. B. im Büro vorbereiten)
+  redirect(formData.get("intent") === "stay" ? `/orders/${order.id}/edit?saved=1` : `/orders/${order.id}`);
 }
 
 export async function updateOrder(_: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireCtx();
   const id = String(formData.get("id"));
-  await requireOrder(ctx, id);
+  const order = await requireOrder(ctx, id);
   const customerId = str(formData.get("customerId"));
   const customer = customerId ? await db.customer.findFirst({ where: { id: customerId, organizationId: ctx.orgId } }) : null;
   if (!customer) return { error: "Bitte wähle einen Kunden aus." };
   try {
-    await db.order.update({ where: { id }, data: { ...(await orderData(ctx, formData)), customerId: customer.id } });
+    const data = await orderData(ctx, formData);
+    const vehicleId = await syncVehicle(ctx.orgId, customer.id, data, str(formData.get("vehicleId")) ?? order.vehicleId);
+    await db.order.update({
+      where: { id },
+      data: {
+        ...data,
+        vehicleId,
+        customerId: customer.id,
+        // Termin nachgetragen → Entwurf wird automatisch zu "Geplant"
+        ...(order.status === "DRAFT" && data.pickupDate ? { status: "PLANNED" as const } : {}),
+      },
+    });
   } catch (e) {
     return { error: (e as Error).message };
   }
-  await logEvent(id, ctx, "Auftragsdaten bearbeitet");
+  const stay = formData.get("intent") === "stay";
+  // Zwischenspeichern erzeugt nicht jedes Mal einen Verlaufseintrag
+  const lastEvent = await db.orderEvent.findFirst({ where: { orderId: id }, orderBy: { createdAt: "desc" } });
+  if (!(stay && lastEvent?.message === "Auftragsdaten bearbeitet" && Date.now() - lastEvent.createdAt.getTime() < 30 * 60000)) {
+    await logEvent(id, ctx, "Auftragsdaten bearbeitet");
+  }
+  revalidatePath(`/orders/${id}`, "layout");
+  if (stay) return { ok: `Zwischengespeichert um ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })} Uhr.` };
   redirect(`/orders/${id}`);
 }
 

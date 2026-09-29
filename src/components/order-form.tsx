@@ -1,69 +1,233 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionForm, type FormState } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { VehicleScan } from "@/components/vehicle-scan";
+import { VehiclePicker } from "@/components/vehicle-picker";
 import { TRANSPORT_MODE } from "@/lib/labels";
+import type { VehicleOption } from "@/lib/vehicles";
+import { calculateRoute, locateAddress } from "@/app/(app)/orders/geo-actions";
 
 export type OrderFormValues = Partial<Record<string, string>>;
 
-function F({ label, name, v, type = "text", className = "", required, ...rest }: { label: string; name: string; v?: OrderFormValues; type?: string; className?: string; required?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className={className}>
-      <label htmlFor={name}>
-        {label}
-        {required && <span className="text-red-500"> *</span>}
-      </label>
-      <input id={name} name={name} type={type} defaultValue={v?.[name] ?? ""} required={required} className="input" {...rest} />
-    </div>
-  );
-}
+export type CustomerOption = {
+  id: string;
+  name: string;
+  displayName: string;
+  contact: string | null;
+  street: string | null;
+  zip: string | null;
+  city: string | null;
+  phone: string | null;
+};
 
-function AddressBlock({ prefix, title, v }: { prefix: "pickup" | "delivery"; title: string; v?: OrderFormValues }) {
-  return (
-    <fieldset className="space-y-4">
-      <legend className="section-title mb-2">{title}</legend>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <F label="Name / Firma" name={`${prefix}Name`} v={v} className="sm:col-span-2" />
-        <F label="Straße & Hausnummer" name={`${prefix}Street`} v={v} className="sm:col-span-2" autoComplete="off" />
-        <F label="PLZ" name={`${prefix}Zip`} v={v} inputMode="numeric" />
-        <F label="Ort" name={`${prefix}City`} v={v} />
-        <F label="Ansprechpartner" name={`${prefix}Contact`} v={v} />
-        <F label="Telefon" name={`${prefix}Phone`} v={v} type="tel" />
-        <F label={prefix === "pickup" ? "Abholtermin" : "Zustelltermin"} name={`${prefix}Date`} v={v} type="datetime-local" className="sm:col-span-2" />
-      </div>
-    </fieldset>
-  );
-}
+type Prefix = "pickup" | "delivery";
 
-const VEHICLE_FIELDS = ["licensePlate", "make", "model", "vin", "color", "firstRegistration"] as const;
+const VEHICLE_FIELDS = ["licensePlate", "vin", "make", "model", "color", "firstRegistration", "vehicleType"] as const;
+
+const minutesLabel = (m: number) => {
+  const h = Math.floor(m / 60);
+  const min = Math.round(m % 60);
+  return h ? `${h} Std. ${min} Min.` : `${min} Min.`;
+};
+
+function parseNum(s: string | undefined) {
+  if (!s) return 0;
+  const t = s.trim();
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export function OrderForm({
   action,
   values,
   customers,
   members,
+  vehicles,
   orderId,
   recognition,
+  geo,
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
-  customers: { id: string; name: string }[];
+  customers: CustomerOption[];
   members: { id: string; name: string }[];
+  vehicles: VehicleOption[];
   orderId?: string;
   recognition: "ai" | "ocr" | "off";
+  geo: boolean;
 }) {
-  const [vehicle, setVehicle] = useState<Record<string, string>>(() =>
-    Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, values?.[k] ?? ""])),
+  const initial = useMemo(() => ({ transportMode: "DRIVEN", pricingType: "FLAT", ...values }) as Record<string, string>, [values]);
+  const [v, setV] = useState<Record<string, string>>(initial);
+  const set = (k: string, val: string) => setV((s) => ({ ...s, [k]: val }));
+  const setMany = (patch: Record<string, string | null | undefined>) =>
+    setV((s) => ({ ...s, ...Object.fromEntries(Object.entries(patch).map(([k, val]) => [k, val ?? ""])) }));
+
+  // ---- Lokaler Entwurf: Eingaben überleben Neuladen / Funkloch ----------------
+  const draftKey = `order-draft:${orderId ?? "new"}`;
+  const [restored, setRestored] = useState(false);
+  const skipSave = useRef(true);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as Record<string, string>;
+        if (JSON.stringify(draft) !== JSON.stringify(initial)) {
+          setV(draft);
+          setRestored(true);
+        }
+      }
+    } catch {
+      /* Speicher nicht verfügbar */
+    }
+  }, [draftKey, initial]);
+  useEffect(() => {
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(v));
+      } catch {
+        /* ignorieren */
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [v, draftKey]);
+  const discardDraft = () => {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* ignorieren */
+    }
+    setV(initial);
+    setRestored(false);
+  };
+
+  // ---- Streckenberechnung -------------------------------------------------------
+  const [route, setRoute] = useState<{ busy: boolean; msg?: string; error?: boolean }>({ busy: false });
+  const [distanceAuto, setDistanceAuto] = useState(!initial.distanceKm);
+  const lastRouteKey = useRef<string | null>(null);
+  const addr = (p: Prefix) => ({ street: v[`${p}Street`] || null, zip: v[`${p}Zip`] || null, city: v[`${p}City`] || null });
+  const routeKey = JSON.stringify([addr("pickup"), addr("delivery")]);
+  const routeReady = Boolean((v.pickupZip || v.pickupCity) && (v.deliveryZip || v.deliveryCity));
+
+  async function runRoute(force = false) {
+    if (!geo || !routeReady) return;
+    if (!force && lastRouteKey.current === routeKey) return;
+    lastRouteKey.current = routeKey;
+    setRoute({ busy: true, msg: "Strecke wird berechnet…" });
+    const res = await calculateRoute(addr("pickup"), addr("delivery"));
+    if (res.error || res.km === undefined) {
+      setRoute({ busy: false, msg: res.error ?? "Keine Route gefunden", error: true });
+      return;
+    }
+    setMany({ distanceKm: String(res.km).replace(".", ","), durationMinutes: String(res.minutes) });
+    setDistanceAuto(true);
+    setRoute({ busy: false, msg: `Berechnet: ${res.km.toLocaleString("de-DE")} km · ca. ${minutesLabel(res.minutes ?? 0)} Fahrzeit` });
+  }
+
+  useEffect(() => {
+    if (!geo || !routeReady || !distanceAuto) return;
+    const t = setTimeout(() => runRoute(false), 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey, distanceAuto, geo, routeReady]);
+
+  // ---- Kunde / Fahrzeug -----------------------------------------------------------
+  const customer = customers.find((c) => c.id === v.customerId);
+  const copyCustomerAddress = (p: Prefix) => {
+    if (!customer) return;
+    setMany({
+      [`${p}Name`]: customer.displayName,
+      [`${p}Street`]: customer.street,
+      [`${p}Zip`]: customer.zip,
+      [`${p}City`]: customer.city,
+      [`${p}Contact`]: customer.contact,
+      [`${p}Phone`]: customer.phone,
+    });
+  };
+  const applyVehicle = (veh: VehicleOption) => {
+    setMany({
+      vehicleId: veh.id,
+      ...Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, veh[k] ?? v[k] ?? ""])),
+      ...(!v.customerId && veh.customerId ? { customerId: veh.customerId } : {}),
+    });
+  };
+  const plate = (v.licensePlate ?? "").toUpperCase().replace(/[\s-]/g, "");
+  const vin = (v.vin ?? "").toUpperCase().trim();
+  const knownMatch =
+    !v.vehicleId && (plate || vin)
+      ? vehicles.find(
+          (veh) => (vin.length === 17 && veh.vin === vin) || (plate.length >= 4 && veh.licensePlate?.replace(/[\s-]/g, "") === plate),
+        )
+      : undefined;
+
+  const km = parseNum(v.distanceKm);
+  const total = v.pricingType === "PER_KM" ? km * parseNum(v.pricePerKm) : parseNum(v.price);
+
+  const input = (name: string, label: string, opts: { className?: string; type?: string; required?: boolean; mono?: boolean } & React.InputHTMLAttributes<HTMLInputElement> = {}) => {
+    const { className = "", type = "text", required, mono, ...rest } = opts;
+    return (
+      <div className={className}>
+        <label htmlFor={name}>
+          {label}
+          {required && <span className="text-red-500"> *</span>}
+        </label>
+        <input
+          id={name}
+          name={name}
+          type={type}
+          value={v[name] ?? ""}
+          onChange={(e) => set(name, e.target.value)}
+          required={required}
+          className={`input ${mono ? "font-mono uppercase" : ""}`}
+          {...rest}
+        />
+      </div>
+    );
+  };
+
+  const addressBlock = (p: Prefix, title: string) => (
+    <fieldset className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <legend className="section-title">{title}</legend>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-secondary px-3 py-1.5 text-xs" disabled={!customer} onClick={() => copyCustomerAddress(p)} title={customer ? "" : "Bitte zuerst einen Kunden wählen"}>
+            👤 Adresse vom Kunden
+          </button>
+          {geo && <LocateButton onAddress={(a) => setMany({ [`${p}Street`]: a.street, [`${p}Zip`]: a.zip, [`${p}City`]: a.city })} />}
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {input(`${p}Name`, "Name / Firma", { className: "sm:col-span-2" })}
+        {input(`${p}Street`, "Straße & Hausnummer", { className: "sm:col-span-2", autoComplete: "off" })}
+        {input(`${p}Zip`, "PLZ", { inputMode: "numeric" })}
+        {input(`${p}City`, "Ort")}
+        {input(`${p}Contact`, "Ansprechpartner")}
+        {input(`${p}Phone`, "Telefon", { type: "tel" })}
+        {input(`${p}Date`, p === "pickup" ? "Abholtermin" : "Zustelltermin", { type: "datetime-local", className: "sm:col-span-2" })}
+      </div>
+    </fieldset>
   );
-  const [pricing, setPricing] = useState(values?.pricingType ?? "FLAT");
-  const set = (k: string, val: string) => setVehicle((s) => ({ ...s, [k]: val }));
 
   return (
-    <ActionForm action={action} className="space-y-6">
+    <ActionForm action={action} className="space-y-6" onSubmitStart={() => { try { localStorage.removeItem(draftKey); } catch { /* ignorieren */ } }}>
       {orderId && <input type="hidden" name="id" value={orderId} />}
+      <input type="hidden" name="vehicleId" value={v.vehicleId ?? ""} />
+      <input type="hidden" name="durationMinutes" value={v.durationMinutes ?? ""} />
+
+      {restored && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+          <span>Nicht gespeicherte Eingaben von diesem Gerät wurden wiederhergestellt.</span>
+          <button type="button" onClick={discardDraft} className="font-semibold underline">
+            Verwerfen
+          </button>
+        </div>
+      )}
 
       <section className="card card-body space-y-4">
         <h2 className="section-title">Auftrag</h2>
@@ -73,7 +237,7 @@ export function OrderForm({
               Kunde <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-2">
-              <select id="customerId" name="customerId" defaultValue={values?.customerId ?? ""} required className="input">
+              <select id="customerId" name="customerId" value={v.customerId ?? ""} onChange={(e) => set("customerId", e.target.value)} required className="input">
                 <option value="">Bitte wählen…</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -90,7 +254,7 @@ export function OrderForm({
           </div>
           <div>
             <label htmlFor="transportMode">Überführungsart</label>
-            <select id="transportMode" name="transportMode" defaultValue={values?.transportMode ?? "DRIVEN"} className="input">
+            <select id="transportMode" name="transportMode" value={v.transportMode} onChange={(e) => set("transportMode", e.target.value)} className="input">
               {Object.entries(TRANSPORT_MODE).map(([k, l]) => (
                 <option key={k} value={k}>
                   {l}
@@ -98,10 +262,10 @@ export function OrderForm({
               ))}
             </select>
           </div>
-          <F label="Referenz / Bestellnr. des Kunden" name="reference" v={values} />
+          {input("reference", "Referenz / Bestellnr. des Kunden")}
           <div className="sm:col-span-2">
             <label htmlFor="assignedToId">Fahrer</label>
-            <select id="assignedToId" name="assignedToId" defaultValue={values?.assignedToId ?? ""} className="input">
+            <select id="assignedToId" name="assignedToId" value={v.assignedToId ?? ""} onChange={(e) => set("assignedToId", e.target.value)} className="input">
               <option value="">Nicht zugewiesen</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -114,84 +278,178 @@ export function OrderForm({
       </section>
 
       <section className="card card-body space-y-4">
-        <h2 className="section-title">Fahrzeug</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="section-title">Fahrzeug</h2>
+          {v.vehicleId && (
+            <span className="flex items-center gap-2 text-xs text-slate-500">
+              Aus Fahrzeugbestand übernommen
+              <button type="button" className="text-brand-600 underline" onClick={() => set("vehicleId", "")}>
+                lösen
+              </button>
+            </span>
+          )}
+        </div>
+        {vehicles.length > 0 && <VehiclePicker vehicles={vehicles} customerId={v.customerId} onSelect={applyVehicle} />}
         {recognition !== "off" && (
           <VehicleScan
             orderId={orderId}
             mode={recognition}
             onResult={(d) =>
-              setVehicle((s) => ({
-                licensePlate: d.licensePlate ?? s.licensePlate,
-                make: d.make ?? s.make,
-                model: d.model ?? s.model,
-                vin: d.vin ?? s.vin,
-                color: d.color ?? s.color,
-                firstRegistration: d.firstRegistration ?? s.firstRegistration,
+              setV((s) => ({
+                ...s,
+                licensePlate: d.licensePlate ?? s.licensePlate ?? "",
+                make: d.make ?? s.make ?? "",
+                model: d.model ?? s.model ?? "",
+                vin: d.vin ?? s.vin ?? "",
+                color: d.color ?? s.color ?? "",
+                firstRegistration: d.firstRegistration ?? s.firstRegistration ?? "",
               }))
             }
           />
         )}
+        {knownMatch && (
+          <div className="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Fahrzeug bereits bekannt: <strong>{[knownMatch.make, knownMatch.model].filter(Boolean).join(" ") || "Fahrzeug"}</strong>{" "}
+              {knownMatch.licensePlate && `(${knownMatch.licensePlate})`}
+            </span>
+            <button type="button" className="btn-secondary px-3 py-1.5 text-xs" onClick={() => applyVehicle(knownMatch)}>
+              Daten übernehmen
+            </button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {(
-            [
-              ["licensePlate", "Kennzeichen"],
-              ["vin", "Fahrgestellnummer (FIN)"],
-              ["make", "Marke"],
-              ["model", "Modell"],
-              ["color", "Farbe"],
-              ["firstRegistration", "Erstzulassung"],
-            ] as const
-          ).map(([k, label]) => (
-            <div key={k}>
-              <label htmlFor={k}>{label}</label>
-              <input
-                id={k}
-                name={k}
-                value={vehicle[k]}
-                onChange={(e) => set(k, e.target.value)}
-                className={`input ${k === "licensePlate" || k === "vin" ? "font-mono uppercase" : ""}`}
-                maxLength={k === "vin" ? 17 : undefined}
-              />
-            </div>
-          ))}
-          <F label="Fahrzeugtyp (z. B. PKW, Transporter, Wohnmobil)" name="vehicleType" v={values} className="sm:col-span-2" />
+          {input("licensePlate", "Kennzeichen", { mono: true })}
+          {input("vin", "Fahrgestellnummer (FIN)", { mono: true, maxLength: 17 })}
+          {input("make", "Marke")}
+          {input("model", "Modell")}
+          {input("color", "Farbe")}
+          {input("firstRegistration", "Erstzulassung")}
+          {input("vehicleType", "Fahrzeugtyp (z. B. PKW, Transporter, Wohnmobil)", { className: "sm:col-span-2" })}
         </div>
       </section>
 
       <section className="card card-body grid gap-8 lg:grid-cols-2">
-        <AddressBlock prefix="pickup" title="Abholung" v={values} />
-        <AddressBlock prefix="delivery" title="Zustellung" v={values} />
+        {addressBlock("pickup", "Abholung")}
+        {addressBlock("delivery", "Zustellung")}
       </section>
 
       <section className="card card-body space-y-4">
-        <h2 className="section-title">Preis</h2>
+        <h2 className="section-title">Strecke & Preis</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
+            <label htmlFor="distanceKm">Entfernung (km)</label>
+            <div className="flex gap-2">
+              <input
+                id="distanceKm"
+                name="distanceKm"
+                inputMode="decimal"
+                value={v.distanceKm ?? ""}
+                onChange={(e) => {
+                  set("distanceKm", e.target.value);
+                  setDistanceAuto(false);
+                }}
+                className="input"
+              />
+              {geo && (
+                <button
+                  type="button"
+                  className="btn-secondary mt-1 shrink-0 px-3"
+                  disabled={route.busy || !routeReady}
+                  onClick={() => runRoute(true)}
+                  title="Strecke aus Abhol- und Zieladresse berechnen"
+                >
+                  {route.busy ? "…" : "↻"}
+                </button>
+              )}
+            </div>
+            {route.msg ? (
+              <p className={`mt-1 text-xs ${route.error ? "text-red-600" : "text-slate-500"}`}>{route.msg}</p>
+            ) : v.durationMinutes ? (
+              <p className="mt-1 text-xs text-slate-500">ca. {minutesLabel(Number(v.durationMinutes))} Fahrzeit</p>
+            ) : geo ? (
+              <p className="mt-1 text-xs text-slate-500">Wird aus den Adressen automatisch berechnet.</p>
+            ) : null}
+          </div>
+          <div>
             <label htmlFor="pricingType">Abrechnung</label>
-            <select id="pricingType" name="pricingType" value={pricing} onChange={(e) => setPricing(e.target.value)} className="input">
+            <select id="pricingType" name="pricingType" value={v.pricingType} onChange={(e) => set("pricingType", e.target.value)} className="input">
               <option value="FLAT">Pauschalpreis</option>
               <option value="PER_KM">Nach Kilometern</option>
             </select>
           </div>
-          <F label="Entfernung (km)" name="distanceKm" v={values} inputMode="decimal" />
-          {pricing === "FLAT" ? (
-            <F label="Pauschale netto (€)" name="price" v={values} inputMode="decimal" />
-          ) : (
-            <F label="Preis je km netto (€)" name="pricePerKm" v={values} inputMode="decimal" />
-          )}
+          {v.pricingType === "FLAT"
+            ? input("price", "Pauschale netto (€)", { inputMode: "decimal" })
+            : input("pricePerKm", "Preis je km netto (€)", { inputMode: "decimal" })}
         </div>
+        {total > 0 && (
+          <p className="text-sm text-slate-600">
+            Auftragswert: <strong>{total.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</strong> netto
+          </p>
+        )}
         <div>
           <label htmlFor="notes">Notizen / Hinweise für den Fahrer</label>
-          <textarea id="notes" name="notes" rows={3} defaultValue={values?.notes ?? ""} className="input" />
+          <textarea id="notes" name="notes" rows={3} value={v.notes ?? ""} onChange={(e) => set("notes", e.target.value)} className="input" />
         </div>
       </section>
 
-      <div className="flex gap-2">
-        <SubmitButton>{orderId ? "Speichern" : "Auftrag anlegen"}</SubmitButton>
-        <Link href={orderId ? `/orders/${orderId}` : "/orders"} className="btn-secondary">
+      <div className="sticky bottom-20 z-10 flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur lg:bottom-4">
+        {orderId ? (
+          <>
+            <SubmitButton name="intent" value="stay" className="btn-secondary">
+              Zwischenspeichern
+            </SubmitButton>
+            <SubmitButton name="intent" value="close">
+              Speichern & schließen
+            </SubmitButton>
+          </>
+        ) : (
+          <>
+            <SubmitButton name="intent" value="stay" className="btn-secondary" pendingText="Wird angelegt…">
+              Anlegen & weiter bearbeiten
+            </SubmitButton>
+            <SubmitButton name="intent" value="close" pendingText="Wird angelegt…">
+              Auftrag anlegen
+            </SubmitButton>
+          </>
+        )}
+        <Link href={orderId ? `/orders/${orderId}` : "/orders"} className="btn-ghost">
           Abbrechen
         </Link>
       </div>
     </ActionForm>
+  );
+}
+
+/** Ermittelt die Adresse zum aktuellen Standort (GPS des Geräts). */
+function LocateButton({ onAddress }: { onAddress: (a: { street: string | null; zip: string | null; city: string | null }) => void }) {
+  const [state, setState] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  function locate() {
+    if (!("geolocation" in navigator)) return setState({ busy: false, error: "Standort wird von diesem Gerät nicht unterstützt." });
+    if (!window.isSecureContext) return setState({ busy: false, error: "Standort funktioniert nur über HTTPS." });
+    setState({ busy: true });
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const res = await locateAddress(pos.coords.latitude, pos.coords.longitude);
+        if (res.address) {
+          onAddress(res.address);
+          setState({ busy: false });
+        } else setState({ busy: false, error: res.error });
+      },
+      (err) =>
+        setState({
+          busy: false,
+          error: err.code === err.PERMISSION_DENIED ? "Standortzugriff wurde nicht erlaubt." : "Standort konnte nicht ermittelt werden.",
+        }),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    );
+  }
+  return (
+    <span className="flex flex-col items-end">
+      <button type="button" className="btn-secondary px-3 py-1.5 text-xs" disabled={state.busy} onClick={locate}>
+        {state.busy ? "Wird geortet…" : "📍 Mein Standort"}
+      </button>
+      {state.error && <span className="mt-1 text-xs text-red-600">{state.error}</span>}
+    </span>
   );
 }

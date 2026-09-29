@@ -57,10 +57,6 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
       <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {busy && <p className="text-sm text-brand-700">{busy}</p>}
       {msg && <p className={`text-sm ${msg.error ? "text-red-600" : "text-emerald-700"}`}>{msg.text}</p>}
-      {recognition === "ai" && <p className="text-xs text-slate-500">Belege werden per KI (Claude) ausgelesen.</p>}
-      {recognition === "ocr" && (
-        <p className="text-xs text-slate-500">Lokale Texterkennung – Belege verlassen deinen Server nicht. PDF-Belege mit Textebene werden am zuverlässigsten erkannt.</p>
-      )}
     </div>
   );
 }

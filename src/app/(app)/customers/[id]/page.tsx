@@ -17,6 +17,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     include: {
       orders: { orderBy: { createdAt: "desc" }, take: 50 },
       invoices: { orderBy: { createdAt: "desc" }, take: 50 },
+      vehicles: { orderBy: { updatedAt: "desc" }, take: 50 },
     },
   });
   if (!customer) notFound();
@@ -62,6 +63,23 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
               </ul>
             )}
           </Card>
+          {customer.vehicles.length > 0 && (
+            <Card title="Fahrzeuge">
+              <ul className="-my-2 divide-y divide-slate-100">
+                {customer.vehicles.map((v) => (
+                  <li key={v.id} className="flex items-center justify-between gap-2 py-2">
+                    <Link href={`/vehicles/${v.id}`} className="min-w-0 truncate text-sm hover:text-brand-600">
+                      <span className="font-medium">{[v.make, v.model].filter(Boolean).join(" ") || "Fahrzeug"}</span>
+                      {v.licensePlate && <span className="ml-2 font-mono text-xs text-slate-500">{v.licensePlate}</span>}
+                    </Link>
+                    <Link href={`/orders/new?vehicleId=${v.id}`} className="shrink-0 text-xs font-medium text-brand-600">
+                      + Auftrag
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card title="Rechnungen">
             {customer.invoices.length === 0 ? (
               <p className="text-sm text-slate-500">Noch keine Rechnungen.</p>

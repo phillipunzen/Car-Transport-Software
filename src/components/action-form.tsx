@@ -16,11 +16,13 @@ export function ActionForm({
   children,
   className = "space-y-4",
   resetOnSuccess = false,
+  onSubmitStart,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   children: ReactNode;
   className?: string;
   resetOnSuccess?: boolean;
+  onSubmitStart?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
@@ -39,6 +41,7 @@ export function ActionForm({
         e.preventDefault();
         const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
         const fd = new FormData(e.currentTarget, submitter);
+        onSubmitStart?.();
         startTransition(() => formAction(fd));
       }}
     >

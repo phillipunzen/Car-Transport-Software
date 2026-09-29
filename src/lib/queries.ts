@@ -4,7 +4,16 @@ import { customerName, toDateTimeLocal } from "@/lib/format";
 
 export async function customerOptions(orgId: string) {
   const customers = await db.customer.findMany({ where: { organizationId: orgId }, orderBy: [{ companyName: "asc" }, { lastName: "asc" }] });
-  return customers.map((c) => ({ id: c.id, name: customerName(c) + (c.city ? ` (${c.city})` : "") }));
+  return customers.map((c) => ({
+    id: c.id,
+    name: customerName(c) + (c.city ? ` (${c.city})` : ""),
+    displayName: customerName(c),
+    contact: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+    street: c.street,
+    zip: c.zip,
+    city: c.city,
+    phone: c.phone,
+  }));
 }
 
 export async function memberOptions(orgId: string) {

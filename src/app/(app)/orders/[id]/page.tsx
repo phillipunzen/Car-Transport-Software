@@ -69,9 +69,33 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   ];
   const openInvoice = order.invoices.find((i) => i.status !== "CANCELLED");
 
+  // Was fehlt noch? (Auftrag kann im Büro vorbereitet und vor Ort vervollständigt werden)
+  const missing = [
+    !order.licensePlate && "Kennzeichen",
+    !order.vin && "Fahrgestellnummer",
+    !order.make && !order.model && "Marke / Modell",
+    !(order.pickupStreet && (order.pickupZip || order.pickupCity)) && "Abholadresse",
+    !(order.deliveryStreet && (order.deliveryZip || order.deliveryCity)) && "Zustelladresse",
+    !order.pickupDate && "Abholtermin",
+    !order.assignedToId && "Fahrer",
+    !price && "Preis",
+  ].filter((m): m is string => Boolean(m));
+  const active = !["INVOICED", "CANCELLED"].includes(order.status);
+
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {active && missing.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-amber-900">
+              <p className="font-semibold">Noch offen</p>
+              <p>{missing.join(" · ")}</p>
+            </div>
+            <Link href={`/orders/${order.id}/edit`} className="btn-secondary shrink-0">
+              Jetzt ergänzen
+            </Link>
+          </div>
+        )}
         <Card title="Ablauf">
           <div className="grid gap-3 sm:grid-cols-2">
             {(["PICKUP", "DELIVERY"] as const).map((stage) => {
@@ -128,6 +152,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               ["Fahrzeugtyp", order.vehicleType],
             ]}
           />
+          {order.vehicleId && (
+            <Link href={`/vehicles/${order.vehicleId}`} className="mt-4 inline-block text-sm font-medium text-brand-600">
+              Fahrzeughistorie ansehen →
+            </Link>
+          )}
         </Card>
 
         <Card title="Route" actions={<Link href={`/orders/${order.id}/edit`} className="text-sm font-medium text-brand-600">Bearbeiten</Link>}>
@@ -168,7 +197,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               ["Referenz", order.reference],
               ["Überführungsart", TRANSPORT_MODE[order.transportMode]],
               ["Fahrer", order.assignedTo?.name ?? order.assignedTo?.email],
-              ["Entfernung", km ? `${formatNumber(km, 1)} km` : null],
+              [
+                "Entfernung",
+                km
+                  ? `${formatNumber(km, 1)} km${order.durationMinutes ? ` · ca. ${Math.floor(order.durationMinutes / 60)} Std. ${order.durationMinutes % 60} Min.` : ""}`
+                  : null,
+              ],
               ["Preis (netto)", price ? formatMoney(price) + (order.pricingType === "PER_KM" ? ` (${formatMoney(order.pricePerKm)}/km)` : "") : null],
               ["Belege", expenses ? formatMoney(expenses) : null],
             ]}

@@ -125,6 +125,7 @@ model Organization {
   orders      Order[]
   invoices    Invoice[]
   files       File[]
+  vehicles    Vehicle[]
 }
 
 model Membership {
@@ -211,9 +212,38 @@ model Customer {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orders       Order[]
   invoices     Invoice[]
+  vehicles     Vehicle[]
 
   @@unique([organizationId, number])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Fahrzeuge (Stammdaten – werden beim Speichern von Aufträgen automatisch gepflegt)
+// ---------------------------------------------------------------------------
+
+model Vehicle {
+  id                String   @id @default(cuid())
+  organizationId    String
+  customerId        String? // zuletzt zugeordneter Kunde
+  licensePlate      String?
+  vin               String?
+  make              String?
+  model             String?
+  color             String?
+  firstRegistration String?
+  vehicleType       String?
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orders       Order[]
+
+  @@index([organizationId, vin])
+  @@index([organizationId, licensePlate])
+  @@index([customerId])
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +275,7 @@ model Order {
   organizationId String
   number         Int
   customerId     String
+  vehicleId      String?
   status         OrderStatus   @default(DRAFT)
   transportMode  TransportMode @default(DRIVEN)
   reference      String? // Referenz / Bestellnummer des Kunden
@@ -277,10 +308,11 @@ model Order {
   vehicleType       String?
 
   // Abrechnung
-  distanceKm  Decimal?    @db.Decimal(10, 1)
-  pricingType PricingType @default(FLAT)
-  price       Decimal?    @db.Decimal(10, 2) // Pauschale (netto)
-  pricePerKm  Decimal?    @db.Decimal(10, 2)
+  distanceKm      Decimal?    @db.Decimal(10, 1)
+  durationMinutes Int? // geschätzte Fahrzeit laut Routenberechnung
+  pricingType     PricingType @default(FLAT)
+  price           Decimal?    @db.Decimal(10, 2) // Pauschale (netto)
+  pricePerKm      Decimal?    @db.Decimal(10, 2)
 
   notes        String?  @db.Text
   createdById  String?
@@ -290,6 +322,7 @@ model Order {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   createdBy    User?        @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   assignedTo   User?        @relation("OrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   photos       Photo[]
@@ -302,6 +335,7 @@ model Order {
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([customerId])
+  @@index([vehicleId])
 }
 
 model OrderEvent {

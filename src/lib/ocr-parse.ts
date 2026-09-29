@@ -148,7 +148,9 @@ export function parseVehicleText(text: string): VehicleGuess {
     firstRegistration: isRegistration ? firstRegistration : null,
     mileage: null,
     notes: found
-      ? "Lokale Texterkennung – bitte Werte prüfen. Modell & Farbe am besten vom Fahrzeugschein auslesen."
+      ? isRegistration
+        ? null
+        : "Modell & Farbe lassen sich am besten vom Fahrzeugschein auslesen."
       : "Kein Text erkannt. Tipp: Kennzeichen, FIN oder Fahrzeugschein formatfüllend und scharf fotografieren.",
   };
 }

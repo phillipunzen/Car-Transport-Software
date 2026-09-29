@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireCtx } from "@/lib/org";
 import { ROLE } from "@/lib/labels";
-import { BottomNav, SideNav } from "@/components/nav";
+import { BottomNav, SettingsIconLink, SideNav } from "@/components/nav";
 import { logout, switchOrg } from "./actions";
 
 function OrgSwitcher({ current, memberships }: { current: string; memberships: { id: string; name: string }[] }) {
@@ -53,8 +53,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <img src="/icon.svg" alt="" className="h-7 w-7" />
           <span className="truncate text-sm font-semibold">{ctx.org.name}</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <OrgSwitcher current={ctx.orgId} memberships={ctx.memberships} />
+          <SettingsIconLink />
           <form action={logout}>
             <button className="btn-ghost px-2 py-1 text-xs">Abmelden</button>
           </form>
