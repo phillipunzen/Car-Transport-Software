@@ -46,14 +46,14 @@ export function OrderForm({
   customers,
   members,
   orderId,
-  aiEnabled,
+  recognition,
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
   customers: { id: string; name: string }[];
   members: { id: string; name: string }[];
   orderId?: string;
-  aiEnabled: boolean;
+  recognition: "ai" | "ocr" | "off";
 }) {
   const [vehicle, setVehicle] = useState<Record<string, string>>(() =>
     Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, values?.[k] ?? ""])),
@@ -115,9 +115,10 @@ export function OrderForm({
 
       <section className="card card-body space-y-4">
         <h2 className="section-title">Fahrzeug</h2>
-        {aiEnabled && (
+        {recognition !== "off" && (
           <VehicleScan
             orderId={orderId}
+            mode={recognition}
             onResult={(d) =>
               setVehicle((s) => ({
                 licensePlate: d.licensePlate ?? s.licensePlate,

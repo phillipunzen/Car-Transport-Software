@@ -1,6 +1,6 @@
 import { requireCtx } from "@/lib/org";
 import { customerOptions, memberOptions } from "@/lib/queries";
-import { aiEnabled } from "@/lib/ai";
+import { recognitionMode } from "@/lib/recognition";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { createOrder } from "../actions";
@@ -17,7 +17,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="Neuer Auftrag" back={{ href: "/orders", label: "Aufträge" }} />
-      <OrderForm action={createOrder} customers={customers} members={members} values={values} aiEnabled={aiEnabled()} />
+      <OrderForm action={createOrder} customers={customers} members={members} values={values} recognition={recognitionMode()} />
     </>
   );
 }

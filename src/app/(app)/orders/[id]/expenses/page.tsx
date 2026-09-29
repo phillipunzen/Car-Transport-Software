@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { formatMoney, toDateInput, toNumber } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
-import { aiEnabled } from "@/lib/ai";
+import { recognitionMode } from "@/lib/recognition";
 import { Card } from "@/components/ui";
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { SubmitButton } from "@/components/submit-button";
@@ -23,7 +23,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
   return (
     <div className="space-y-6">
       <Card title="Beleg erfassen">
-        <ReceiptUpload orderId={order.id} aiEnabled={aiEnabled()} />
+        <ReceiptUpload orderId={order.id} recognition={recognitionMode()} />
         <details className="mt-4">
           <summary className="cursor-pointer text-sm font-medium text-slate-600">Ausgabe ohne Beleg erfassen (z. B. Verpflegungspauschale)</summary>
           <form action={addExpense} className="mt-3 grid gap-3 sm:grid-cols-5">

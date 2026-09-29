@@ -7,9 +7,11 @@ import { scanVehicle, type VehicleScanResult } from "@/app/(app)/orders/actions"
 /** Button: Fotos aufnehmen → Fahrzeugdaten automatisch auslesen */
 export function VehicleScan({
   orderId,
+  mode,
   onResult,
 }: {
   orderId?: string;
+  mode: "ai" | "ocr";
   onResult: (data: NonNullable<VehicleScanResult["data"]>) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -47,7 +49,13 @@ export function VehicleScan({
     <div className="rounded-lg border border-dashed border-brand-500/40 bg-brand-50 p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-700">
-          <span className="font-semibold">Automatisch erkennen:</span> Foto von Fahrzeug/Kennzeichen, FIN oder Fahrzeugschein aufnehmen.
+          <span className="font-semibold">Automatisch erkennen:</span>{" "}
+          {mode === "ai"
+            ? "Foto von Fahrzeug/Kennzeichen, FIN oder Fahrzeugschein aufnehmen."
+            : "Kennzeichen, FIN oder Fahrzeugschein formatfüllend fotografieren."}
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {mode === "ai" ? "Erkennung per KI (Claude)" : "Lokale Texterkennung – Bilder verlassen deinen Server nicht"}
+          </span>
         </p>
         <button type="button" className="btn-primary shrink-0" disabled={busy} onClick={() => input.current?.click()}>
           {busy ? "Wird ausgelesen…" : "📷 Foto auslesen"}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { deleteFile, saveUpload } from "@/lib/files";
-import { aiEnabled, extractReceipt } from "@/lib/ai";
+import { recognitionMode, recognizeReceipt } from "@/lib/recognition";
 import { decimal, str } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { logEvent } from "../../actions";
@@ -16,7 +16,7 @@ async function orderFor(orderId: string) {
   return { ctx, order };
 }
 
-/** Beleg hochladen und – falls eingerichtet – automatisch auslesen. */
+/** Beleg hochladen und automatisch auslesen (KI oder lokale OCR). */
 export async function uploadReceipt(formData: FormData): Promise<{ error?: string; recognized?: boolean }> {
   const { ctx, order } = await orderFor(String(formData.get("orderId")));
   const file = formData.get("file");
@@ -29,10 +29,12 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
     return { error: (e as Error).message };
   }
 
-  let extracted: Awaited<ReturnType<typeof extractReceipt>> | null = null;
-  if (aiEnabled()) {
+  let extracted: Awaited<ReturnType<typeof recognizeReceipt>> | null = null;
+  if (recognitionMode() !== "off") {
     try {
-      extracted = await extractReceipt({ data: saved.data, mimeType: saved.record.mimeType });
+      const result = await recognizeReceipt({ data: saved.data, mimeType: saved.record.mimeType });
+      // Nur als "erkannt" werten, wenn tatsächlich etwas gefunden wurde
+      if (result.amountGross !== null || result.vendor || result.date) extracted = result;
     } catch (e) {
       console.error("Belegerkennung fehlgeschlagen", e);
     }

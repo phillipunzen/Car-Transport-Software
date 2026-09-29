@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { canManage, nextNumber, requireCtx, type Ctx } from "@/lib/org";
 import { decimal, fromDateTimeLocal, str } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
-import { aiEnabled, extractVehicle } from "@/lib/ai";
+import { recognitionMode, recognizeVehicle } from "@/lib/recognition";
 import { deleteFile, saveUpload } from "@/lib/files";
 import type { FormState } from "@/components/action-form";
 
@@ -146,10 +146,10 @@ export type VehicleScanResult = {
   };
 };
 
-/** Liest Kennzeichen, Marke, Modell, FIN usw. aus Fotos aus. */
+/** Liest Kennzeichen, Marke, Modell, FIN usw. aus Fotos aus (KI oder lokale OCR). */
 export async function scanVehicle(formData: FormData): Promise<VehicleScanResult> {
   const ctx = await requireCtx();
-  if (!aiEnabled()) return { error: "Die automatische Erkennung ist nicht eingerichtet (ANTHROPIC_API_KEY fehlt)." };
+  if (recognitionMode() === "off") return { error: "Die automatische Erkennung ist deaktiviert." };
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0).slice(0, 5);
   if (files.length === 0) return { error: "Bitte mindestens ein Foto auswählen." };
   const orderId = str(formData.get("orderId"));
@@ -166,7 +166,7 @@ export async function scanVehicle(formData: FormData): Promise<VehicleScanResult
         inputs.push({ data: Buffer.from(await file.arrayBuffer()), mimeType: file.type });
       }
     }
-    const data = await extractVehicle(inputs);
+    const data = await recognizeVehicle(inputs);
     if (orderId) revalidatePath(`/orders/${orderId}`);
     return { data };
   } catch (e) {

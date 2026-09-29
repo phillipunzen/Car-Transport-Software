@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/lib/org";
 import { customerOptions, getOrder, memberOptions, orderToFormValues } from "@/lib/queries";
-import { aiEnabled } from "@/lib/ai";
+import { recognitionMode } from "@/lib/recognition";
 import { OrderForm } from "@/components/order-form";
 import { updateOrder } from "../../actions";
 
@@ -18,7 +18,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       members={members}
       values={orderToFormValues(order)}
       orderId={order.id}
-      aiEnabled={aiEnabled()}
+      recognition={recognitionMode()}
     />
   );
 }

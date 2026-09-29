@@ -13,7 +13,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 
 **Fahrzeug & Zustand**
 - Fotos direkt aus der Handykamera, getrennt nach *Abholung* und *Übergabe*, mit Kategorien (Front, Heck, Innenraum, Tacho, FIN …); Bilder werden vor dem Upload im Browser verkleinert
-- **Automatische Erkennung** per Foto: Kennzeichen, Marke, Modell, Fahrgestellnummer (FIN), Farbe, Erstzulassung – auch vom Fahrzeugschein. Alle Werte bleiben manuell editierbar.
+- **Automatische Erkennung** per Foto: Kennzeichen, Marke, Modell, Fahrgestellnummer (FIN), Farbe, Erstzulassung – auch vom Fahrzeugschein. Wahlweise lokal per OCR oder per KI (siehe unten). Alle Werte bleiben manuell editierbar.
 - Interaktive **Schadensskizze**: Bereich antippen → Art, Schwere, Beschreibung und Foto erfassen
 - Vergleich der Schäden bei Übergabe mit dem Zustand bei Abholung
 
@@ -25,7 +25,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 
 **Belege & Spesen**
 - Belege (Bahn, Hotel, Tanken, Maut, Spesen …) fotografieren oder als PDF hochladen
-- **Automatisches Auslesen** von Aussteller, Datum, Betrag, USt-Satz und Kategorie
+- **Automatisches Auslesen** von Aussteller, Datum, Betrag, USt-Satz und Kategorie (lokal per OCR oder per KI)
 - Kennzeichnung „weiterberechnen“ – fließt automatisch in die Rechnung ein
 
 **Rechnungen**
@@ -48,7 +48,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - MySQL 8 via Prisma ORM
 - Auth.js (NextAuth v5) – Credentials, Google, Apple
 - PDF-Erzeugung mit PDFKit, QR-Codes mit `qrcode`
-- Bilderkennung mit der Claude-API (Anthropic, Vision + Structured Outputs)
+- Erkennung: lokal mit Tesseract (OCR, WebAssembly) + `unpdf` für PDF-Belege, optional Claude-API (Anthropic, Vision + Structured Outputs)
 - Dateien lokal (Docker-Volume) oder S3-kompatibel (für mehrere Instanzen)
 - Docker-Image (standalone, non-root) mit automatischen Datenbank-Migrationen und Healthcheck (`/api/health`)
 
@@ -82,7 +82,8 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 | `AUTH_URL`, `APP_URL` | Öffentliche URL (OAuth-Callbacks, Einladungslinks) |
 | `AUTH_GOOGLE_ID/SECRET` | Google-Login (optional) |
 | `AUTH_APPLE_ID/SECRET` | Apple-Login (optional) |
-| `ANTHROPIC_API_KEY` | Aktiviert die automatische Erkennung von Fahrzeugdaten und Belegen (optional) |
+| `ANTHROPIC_API_KEY` | Schaltet die Erkennung von lokaler OCR auf KI um (optional) |
+| `OCR_ENABLED` | Lokale OCR an/aus (Standard: an) |
 | `STORAGE_DRIVER` | `local` oder `s3` |
 | `SMTP_*` | E-Mail-Versand für Einladungen (optional – sonst wird ein Link angezeigt) |
 
@@ -92,8 +93,22 @@ In der [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 ### Apple-Login einrichten
 Im Apple-Developer-Konto eine *Services ID* anlegen, „Sign in with Apple“ aktivieren und als Return-URL `https://<deine-domain>/api/auth/callback/apple` eintragen. `AUTH_APPLE_ID` ist die Services ID, `AUTH_APPLE_SECRET` das daraus generierte Client-Secret (JWT, max. 6 Monate gültig – siehe [Auth.js-Doku](https://authjs.dev/getting-started/providers/apple)). Apple erfordert HTTPS.
 
-### Automatische Erkennung
-Mit gesetztem `ANTHROPIC_API_KEY` werden Fotos von Fahrzeug, Kennzeichen, FIN, Tacho oder Fahrzeugschein sowie Belege über die Claude-API ausgelesen (Standardmodell `claude-opus-5-5`, über `ANTHROPIC_MODEL` änderbar). Ohne Schlüssel funktioniert alles weiterhin – die Felder werden dann manuell ausgefüllt.
+### Automatische Erkennung & Datenschutz
+
+Die Anwendung wählt die Erkennungsmethode automatisch:
+
+| | **Ohne** `ANTHROPIC_API_KEY` – lokale OCR | **Mit** `ANTHROPIC_API_KEY` – KI |
+| --- | --- | --- |
+| Verarbeitung | Auf dem eigenen Server (Tesseract), Sprachdaten im Image enthalten | Claude-API von Anthropic (USA) |
+| Datenweitergabe | keine | Bilder werden an Anthropic übermittelt → AV-Vertrag, Datenschutzerklärung, Drittlandtransfer (SCC) beachten |
+| Kosten | keine | pro Erkennung (API-Nutzung) |
+| FIN | gut (Plausibilitätsprüfung, Korrektur typischer OCR-Fehler) | sehr gut |
+| Marke | aus der FIN (Herstellerkennung) oder Fahrzeugschein | auch vom Fahrzeugfoto |
+| Modell, Farbe, Erstzulassung | nur vom Fahrzeugschein (Felder D.3, R, B) | Fahrzeugschein & Foto |
+| Kennzeichen | wenn formatfüllend fotografiert | auch auf Fahrzeugfotos |
+| Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
+
+Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen gerade, scharf und formatfüllend fotografieren. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
 
 ## Lokale Entwicklung
 
@@ -105,7 +120,7 @@ DATABASE_URL="mysql://root:root@localhost:3306/cartransport" npx prisma migrate 
 npm run dev
 ```
 
-Nützliche Befehle: `npm run typecheck`, `npm run lint`, `npm run build`, `npm run db:studio`.
+Nützliche Befehle: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm run db:studio`.
 
 ## Projektstruktur
 
@@ -115,7 +130,9 @@ src/auth.ts                    Auth.js-Konfiguration (E-Mail, Google, Apple)
 src/app/(auth)/                Login, Registrierung, Einladungen
 src/app/(app)/                 Dashboard, Aufträge, Kunden, Rechnungen, Einstellungen
 src/app/api/                   Datei-Auslieferung, PDF-Endpunkte, Healthcheck
-src/lib/ai.ts                  Fahrzeug- und Belegerkennung (Claude Vision)
+src/lib/recognition.ts         Auswahl der Erkennung (KI oder lokale OCR)
+src/lib/ocr.ts, ocr-parse.ts   Lokale Texterkennung & Auswertung (FIN, Kennzeichen, Fahrzeugschein, Belege)
+src/lib/ai.ts                  KI-Erkennung (Claude Vision)
 src/lib/pdf/                   Rechnungs- und Protokoll-PDFs
 src/lib/storage.ts             Datei-Speicher (lokal / S3)
 ```
