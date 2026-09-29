@@ -4,28 +4,36 @@ import { useRef, useState } from "react";
 import { prepareUpload } from "@/lib/client-image";
 import { scanVehicle, type VehicleScanResult } from "@/app/(app)/orders/actions";
 
-/** Button: Fotos aufnehmen → Fahrzeugdaten automatisch auslesen */
+/**
+ * Fotos oder Scans (z. B. Fahrzeugschein als Foto/PDF) auswählen → Fahrzeugdaten automatisch auslesen.
+ * `onFiles` erhält die (verkleinerten) Dateien, z. B. um sie anschließend am Fahrzeug abzulegen.
+ */
 export function VehicleScan({
   orderId,
   mode,
   onResult,
+  onFiles,
 }: {
   orderId?: string;
   mode: "ai" | "ocr";
   onResult: (data: NonNullable<VehicleScanResult["data"]>) => void;
+  onFiles?: (files: File[]) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
-  async function handle(files: FileList | null) {
-    if (!files?.length) return;
+  async function handle(list: FileList | null) {
+    if (!list?.length) return;
     setBusy(true);
     setMessage(null);
     try {
+      const files = await Promise.all(Array.from(list).slice(0, 5).map((f) => prepareUpload(f, 2600, 0.9)));
+      onFiles?.(files);
       const fd = new FormData();
       if (orderId) fd.append("orderId", orderId);
-      for (const f of Array.from(files).slice(0, 5)) fd.append("files", await prepareUpload(f, 1600));
+      for (const f of files) fd.append("files", f);
       const res = await scanVehicle(fd);
       if (res.error || !res.data) {
         setMessage({ text: res.error ?? "Keine Daten erkannt.", error: true });
@@ -41,7 +49,8 @@ export function VehicleScan({
       setMessage({ text: "Die Erkennung ist fehlgeschlagen.", error: true });
     } finally {
       setBusy(false);
-      if (input.current) input.current.value = "";
+      if (camera.current) camera.current.value = "";
+      if (picker.current) picker.current.value = "";
     }
   }
 
@@ -51,13 +60,20 @@ export function VehicleScan({
         <p className="text-sm text-slate-700">
           <span className="font-semibold">Automatisch erkennen:</span>{" "}
           {mode === "ai"
-            ? "Foto von Fahrzeug/Kennzeichen, FIN oder Fahrzeugschein aufnehmen."
-            : "Kennzeichen, FIN oder Fahrzeugschein formatfüllend fotografieren."}        </p>
-        <button type="button" className="btn-primary shrink-0" disabled={busy} onClick={() => input.current?.click()}>
-          {busy ? "Wird ausgelesen…" : "📷 Foto auslesen"}
-        </button>
+            ? "Fahrzeugschein, Fahrzeug/Kennzeichen oder FIN fotografieren bzw. hochladen."
+            : "Fahrzeugschein, Kennzeichen oder FIN formatfüllend fotografieren bzw. hochladen."}
+        </p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => camera.current?.click()}>
+            {busy ? "Wird ausgelesen…" : "📷 Foto"}
+          </button>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={() => picker.current?.click()}>
+            Datei / PDF
+          </button>
+        </div>
       </div>
-      <input ref={input} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => handle(e.target.files)} />
+      <input ref={camera} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => handle(e.target.files)} />
+      <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {message && <p className={`mt-2 text-sm ${message.error ? "text-red-600" : "text-emerald-700"}`}>{message.text}</p>}
     </div>
   );

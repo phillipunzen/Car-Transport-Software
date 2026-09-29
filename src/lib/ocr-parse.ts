@@ -28,23 +28,31 @@ function normalizeVin(s: string) {
 
 export function findVin(text: string): string | null {
   const candidates: { vin: string; score: number }[] = [];
-  const lines = text.toUpperCase().split(/\n/);
-  for (const line of lines) {
-    // Leerzeichen/Bindestriche innerhalb der FIN zulassen
-    const compact = line.replace(/[\s\-.:*]/g, "");
-    for (let i = 0; i + 17 <= compact.length; i++) {
-      const raw = compact.slice(i, i + 17);
-      if (!/^[A-Z0-9]{17}$/.test(raw)) continue;
-      const vin = normalizeVin(raw);
-      if (!VIN_CHARS.test(vin)) continue;
-      const digits = (vin.match(/\d/g) ?? []).length;
-      if (digits < 4 || digits > 15) continue;
-      // Letzte 4 Stellen sind bei (fast) allen Herstellern numerisch
-      let score = /\d{4}$/.test(vin) ? 2 : 0;
-      if (WMI_MAKES[vin.slice(0, 3)] || WMI_MAKES[vin.slice(0, 2)]) score += 3;
-      if (vinCheckDigitValid(vin)) score += 2;
-      if (/FIN|VIN|FAHRZEUG-?IDENT|\bE\b/.test(line)) score += 1;
-      candidates.push({ vin, score });
+  for (const line of text.toUpperCase().split(/\n/)) {
+    // FIN = ein Wort mit 17 Zeichen; OCR (oder die Schreibweise) trennt es manchmal in mehrere Teile
+    const tokens = line.split(/[\s|\-.:*]+/).filter(Boolean);
+    for (let i = 0; i < tokens.length; i++) {
+      let raw = "";
+      for (let j = i; j < Math.min(tokens.length, i + 7); j++) {
+        raw += tokens[j];
+        if (raw.length > 18) break;
+        // Prüfziffer (Feld 3) hinten oder eine als "1" gelesene Tabellenlinie vorn → 18 Zeichen zulassen
+        for (const cand of raw.length === 18 ? [raw.slice(0, 17), raw.slice(1)] : raw.length === 17 ? [raw] : []) {
+          if (!/^[A-Z0-9]{17}$/.test(cand)) continue;
+          // Echte Ziffern zählen (nicht erst durch O→0 / I→1 entstanden) – filtert lange Wörter heraus
+          const realDigits = (cand.match(/\d/g) ?? []).length;
+          if (realDigits < 3 || /[A-Z]{12,}/.test(cand)) continue;
+          const vin = normalizeVin(cand);
+          if (!VIN_CHARS.test(vin)) continue;
+          // Ohne bekannte Herstellerkennung und gültige Prüfziffer nur mit typischer Seriennummer (viele Ziffern)
+          if (!makeFromVin(vin) && !vinCheckDigitValid(vin) && realDigits < 6) continue;
+          let score = /\d{4}$/.test(vin) ? 2 : 0;
+          if (WMI_MAKES[vin.slice(0, 3)] || WMI_MAKES[vin.slice(0, 2)]) score += 3;
+          if (vinCheckDigitValid(vin)) score += 2;
+          if (j === i) score += 1; // zusammenhängend erkannt
+          candidates.push({ vin, score });
+        }
+      }
     }
   }
   candidates.sort((a, b) => b.score - a.score);
@@ -77,30 +85,124 @@ export function makeFromVin(vin: string | null) {
 // ---------------------------------------------------------------------------
 
 const PLATE = /\b([A-ZÄÖÜ]{1,3})[\s\-:·.]{0,2}([A-Z]{1,2})[\s\-]{0,2}([1-9]\d{0,3})\s?([EH])?\b/;
+const PLATE_LINE = /^([A-ZÄÖÜ]{1,3})[\s\-:·.]{1,3}([A-Z]{1,2})[\s\-]{0,2}([1-9]\d{0,3})\s?([EH])?$/;
+// Häufige Fehltreffer aus Fahrzeugschein & Belegen (Abgasnorm, Kraftstoff, Adresse …)
+const PLATE_NOISE = /EURO|DIESEL|BENZIN|STRASSE|STR\.|GMBH|TEL|FAX|WLTP|NEFZ|HYBR|KW\b|SPL/;
+const NOT_A_DISTRICT = new Set(["EUR", "EU", "ST", "NR", "TEL", "FAX", "KW", "KM", "PS", "UST"]);
 
-export function findPlate(text: string): string | null {
-  for (const line of text.toUpperCase().split(/\n/)) {
-    const m = line.replace(/[|]/g, "").match(PLATE);
-    if (!m) continue;
-    // Häufige Fehltreffer (z. B. Datums- oder Fließtext) aussortieren
-    if (/STRASSE|STR\.|GMBH|TEL|FAX/.test(line)) continue;
-    return `${m[1]}-${m[2]} ${m[3]}${m[4] ?? ""}`;
+const formatPlate = (m: RegExpMatchArray) => `${m[1]}-${m[2]} ${m[3]}${m[4] ?? ""}`;
+
+export function findPlate(text: string, strict = false): string | null {
+  // Störzeichen am Zeilenrand (Tabellenlinien, Staub: "(", ".", "\\" …) entfernen
+  // Im Fahrzeugschein ist das Kennzeichen immer in Großbuchstaben gedruckt – Kleinbuchstaben = Fehltreffer
+  const lines = (strict ? text : text.toUpperCase())
+    .split(/\n/)
+    .map((l) => cleanLine(l).replace(/^[^A-ZÄÖÜ0-9]+|[^A-Z0-9]+$/g, ""));
+  // 1. Zeile, die nur aus einem Kennzeichen besteht (z. B. Feld A im Fahrzeugschein)
+  for (const line of lines) {
+    const m = line.replace(/^A\s+(?=[A-ZÄÖÜ]{1,3}[\s\-]+[A-Z]{1,2}[\s\-]?\d)/, "").match(PLATE_LINE);
+    if (m && !NOT_A_DISTRICT.has(m[1])) return formatPlate(m);
+  }
+  if (strict) return null;
+  // 2. Kennzeichen irgendwo in einer Zeile
+  for (const line of lines) {
+    if (PLATE_NOISE.test(line)) continue;
+    const m = line.match(PLATE);
+    if (m && !NOT_A_DISTRICT.has(m[1])) return formatPlate(m);
   }
   return null;
 }
 
 // ---------------------------------------------------------------------------
 // Fahrzeugschein (Zulassungsbescheinigung Teil I)
+//
+// Aufbau (rechte Seite, von oben): B Erstzulassung · 2.1 HSN · 2.2 TSN / J · 4 /
+// E FIN / D.1 Marke / D.2 Typ, Variante, Version (3 Zeilen) / D.3 Handelsbezeichnung /
+// 2 Herstellerkurzbezeichnung / 5 Fahrzeugklasse … Links: A Kennzeichen, C.1 Halter.
+// Die kleinen Feldnummern und Tabellenlinien erkennt OCR oft als Störzeichen –
+// deshalb wird zusätzlich über die feste Reihenfolge der Zeilen ausgewertet.
 // ---------------------------------------------------------------------------
 
-const DATE = /(\d{2})[.,](\d{2})[.,](\d{4}|\d{2})\b/;
+const MAKES: [RegExp, string][] = [
+  [/MERCEDES[\s\-]*BENZ|^MERCEDES$|DAIMLER/, "Mercedes-Benz"],
+  [/VOLKSWAGEN|^VW\b/, "Volkswagen"],
+  [/^BMW\b|BAYER(ISCHE)?\s*MOTOREN/, "BMW"],
+  [/^AUDI\b/, "Audi"],
+  [/^OPEL\b/, "Opel"],
+  [/^FORD\b/, "Ford"],
+  [/^PORSCHE\b/, "Porsche"],
+  [/^SKODA\b|^ŠKODA\b/, "Škoda"],
+  [/^SEAT\b/, "SEAT"],
+  [/^CUPRA\b/, "Cupra"],
+  [/^RENAULT\b/, "Renault"],
+  [/^DACIA\b/, "Dacia"],
+  [/^PEUGEOT\b/, "Peugeot"],
+  [/^CITRO[EË]N\b/, "Citroën"],
+  [/^DS\b/, "DS"],
+  [/^FIAT\b/, "Fiat"],
+  [/^ALFA\s*ROMEO\b/, "Alfa Romeo"],
+  [/^JEEP\b/, "Jeep"],
+  [/^TOYOTA\b/, "Toyota"],
+  [/^LEXUS\b/, "Lexus"],
+  [/^MAZDA\b/, "Mazda"],
+  [/^NISSAN\b/, "Nissan"],
+  [/^HONDA\b/, "Honda"],
+  [/^MITSUBISHI\b/, "Mitsubishi"],
+  [/^SUZUKI\b/, "Suzuki"],
+  [/^SUBARU\b/, "Subaru"],
+  [/^HYUNDAI\b/, "Hyundai"],
+  [/^KIA\b/, "Kia"],
+  [/^VOLVO\b/, "Volvo"],
+  [/^TESLA\b/, "Tesla"],
+  [/^MINI\b/, "MINI"],
+  [/^SMART\b/, "smart"],
+  [/^LAND\s*ROVER\b/, "Land Rover"],
+  [/^JAGUAR\b/, "Jaguar"],
+  [/^MG\b/, "MG"],
+  [/^BYD\b/, "BYD"],
+  [/^POLESTAR\b/, "Polestar"],
+  [/^IVECO\b/, "Iveco"],
+  [/^MAN\b/, "MAN"],
+];
 
-function fieldValue(lines: string[], code: RegExp) {
-  for (const line of lines) {
-    const m = line.match(code);
-    if (m && m[1]?.trim()) return m[1].trim().replace(/\s{2,}/g, " ");
-  }
+/** Tabellenlinien, Anführungszeichen u. ä. entfernen, Leerraum normalisieren. */
+function cleanLine(l: string) {
+  return l
+    .replace(/[|\[\]{}_=~»«„“”"'`¦!\\°]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Führende Feldnummern wie "D.1", "D 3", "2.1", "2" entfernen. */
+function stripFieldLabel(l: string) {
+  return l
+    .replace(/^(?:[A-Z]\s?[.,:]\s?\d(?:\s?[.,]\s?\d)?|[0O]\s?[.,]\s?\d|\d{1,2}(?:[.,]\d)?)\s+(?=\S)/, "")
+    .trim();
+}
+
+/** Zeile ohne Feldnummer und ohne Störzeichen am Rand, in Großbuchstaben */
+const core = (line: string) =>
+  stripFieldLabel(cleanLine(line).replace(/^[^A-Za-z0-9ÄÖÜäöü]+/, ""))
+    .toUpperCase()
+    .replace(/[^A-Z0-9ÄÖÜ)]+$/, "");
+
+function matchMake(line: string): string | null {
+  const u = core(line);
+  for (const [re, name] of MAKES) if (re.test(u)) return name;
   return null;
+}
+
+/** Zeile besteht nur aus der Marke (optional mit Länderkürzel, z. B. "MAZDA (J)") → Feld D.1 oder 2 */
+function isMakeOnly(line: string, make: string) {
+  const u = core(line).replace(/\(.*?\)|\bAG\b|\bGMBH\b/g, "").trim();
+  return matchMake(u) === make && u.split(/\s+/).length <= 2 && !/\d/.test(u);
+}
+
+function toDate(d: string, m: string, y: string) {
+  const year = y.length === 2 ? `${Number(y) > 50 ? "19" : "20"}${y}` : y;
+  if (Number(d) < 1 || Number(d) > 31 || Number(m) < 1 || Number(m) > 12) return null;
+  if (Number(year) < 1950 || Number(year) > new Date().getFullYear()) return null;
+  return `${d.padStart(2, "0")}.${m.padStart(2, "0")}.${year}`;
 }
 
 export type VehicleGuess = {
@@ -115,28 +217,61 @@ export type VehicleGuess = {
 };
 
 export function parseVehicleText(text: string): VehicleGuess {
-  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = text.split(/\n/).map(cleanLine).filter(Boolean);
+  const upper = text.toUpperCase();
   const vin = findVin(text);
 
-  // Feldcodes des Fahrzeugscheins: A Kennzeichen, B Erstzulassung, D.1 Marke, D.3 Handelsbezeichnung, E FIN, R Farbe
-  const isRegistration = /ZULASSUNGSBESCHEINIGUNG|D\.1|D\.3|\bE\b.*[A-Z0-9]{17}/i.test(text);
-  let make = fieldValue(lines, /\bD\s?\.\s?1\b[:\s]*([A-ZÄÖÜa-zäöüé][\wÄÖÜäöüé\-. ]{1,30})/);
-  let model = fieldValue(lines, /\bD\s?\.\s?3\b[:\s]*([\wÄÖÜäöüé\-. ]{2,40})/);
-  const regDate = lines.map((l) => l.match(new RegExp(`\\bB\\b[^\\d]{0,6}${DATE.source}`))).find(Boolean);
-  const color = fieldValue(lines, /\bR\b[:\s]+([A-ZÄÖÜ][A-ZÄÖÜa-zäöü]{2,15})\b/);
+  // Erstzulassung (Feld B): Datum, direkt gefolgt von der 4-stelligen Herstellerschlüsselnummer
+  const bMatch = upper.match(/(\d{1,2})[.,](\d{1,2})[.,](\d{4})\D{1,8}\d{4}\b/);
+  const bField = bMatch && toDate(bMatch[1], bMatch[2], bMatch[3]) ? bMatch : null;
+  const anyDate = lines
+    .map((l) => (/DATUM|HU\b/i.test(l) ? null : l.match(/\b(\d{1,2})[.,](\d{1,2})[.,](\d{4})\b/)))
+    .find((m) => m && toDate(m[1], m[2], m[3]));
+  const isRegistration =
+    /ZULASSUNGSBESCHEINIGUNG|FAHRZEUGSCHEIN|FZ\.?\s?Z\.?\s?PERS|KENNZEICHEN|EG-?TYP|\bD\s?\.\s?[13]\b/i.test(text) || Boolean(bField && vin);
 
-  make = make ? titleCase(make.replace(/\s*\(.*$/, "")) : makeFromVin(vin);
-  if (model) model = model.replace(/\s+/g, " ");
+  // Marke (Feld D.1): erste Zeile mit einer bekannten Marke; sonst aus der FIN
+  const makeIdx = lines.findIndex((l) => matchMake(l));
+  const legacyD1 = lines.map((l) => l.match(/\bD\s?\.\s?1\b[:\s]*([A-ZÄÖÜa-zäöüé][\wÄÖÜäöüé\-. ]{1,30})/)).find(Boolean)?.[1];
+  let make = makeIdx >= 0 ? matchMake(lines[makeIdx]) : legacyD1 ? titleCase(legacyD1.replace(/\s*\(.*$/, "")) : null;
+  const vinMake = makeFromVin(vin);
+  if (!make) make = vinMake;
 
-  let firstRegistration: string | null = null;
-  if (regDate) {
-    const year = regDate[3].length === 2 ? `${Number(regDate[3]) > 50 ? "19" : "20"}${regDate[3]}` : regDate[3];
-    firstRegistration = `${regDate[1]}.${regDate[2]}.${year}`;
+  // Modell (Feld D.3): die Zeile direkt vor Feld 2 (Marke erneut, z. B. "MAZDA (J)")
+  let model: string | null = null;
+  const d3 = lines.map((l) => l.match(/\bD\s?\.\s?3\b[:\s]*([\wÄÖÜäöüé\-. ]{2,40})/)).find(Boolean)?.[1];
+  if (d3) model = d3;
+  if (!model && make && makeIdx >= 0) {
+    // D.1 ist eine reine Markenzeile. Fehlt sie im OCR-Text, ist die erste Markenzeile schon D.3 ("MAZDA CX-5").
+    const d1 = isMakeOnly(lines[makeIdx], make) ? makeIdx : -1;
+    let field2 = lines.findIndex((l, i) => i > makeIdx && i - 1 !== d1 && isMakeOnly(l, make!));
+    if (field2 < 0) {
+      // Alternativ: Fahrzeugklasse (Feld 5, "FZ.Z.PERS.BEF…") steht zwei Zeilen nach D.3
+      const cls = lines.findIndex((l, i) => i > makeIdx && /PERS|BEF\.|SPL\b|LKW|KRAFTRAD|SATTEL/i.test(l));
+      if (cls > makeIdx + 1) field2 = cls - 1;
+    }
+    const candidate = field2 > 0 ? lines[field2 - 1] : d1 >= 0 ? lines[d1 + 4] : null;
+    if (candidate && (field2 - 1 !== d1 || field2 < 0)) {
+      const cleaned = stripFieldLabel(candidate);
+      if (/[A-Za-z0-9]/.test(cleaned) && cleaned.length <= 40 && !/PERS|BEF\.|EURO|\d{3}\/\d{2}R\d/.test(cleaned.toUpperCase())) {
+        model = cleaned;
+      }
+    }
+  }
+  if (model) model = model.replace(/^[^A-Za-z0-9ÄÖÜäöü]+|[^A-Za-z0-9ÄÖÜäöü)]+$/g, "").trim() || null;
+  // Nur 1–2 Ziffern ist eine Feldnummer, kein Modell
+  if (model && /^\d{1,2}$/.test(model)) model = null;
+  if (model && make) {
+    // "MAZDA CX-5" → "CX-5"
+    const prefix = new RegExp(`^${make.replace(/[-\s]/g, "[\\s-]?")}\\s+`, "i");
+    model = model.replace(prefix, "").trim() || model;
   }
 
-  const licensePlate =
-    fieldValue(lines, /^A\b[:\s]+([A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}[\s\-]?\d{1,4}[EH]?)/)?.replace(/^([A-ZÄÖÜ]{1,3})[\s\-]+([A-Z]{1,2})[\s\-]?/, "$1-$2 ") ??
-    findPlate(text);
+  const color = lines.map((l) => l.match(/\bR\b[:\s]+([A-ZÄÖÜ][A-ZÄÖÜa-zäöü]{2,15})\b/)).find(Boolean)?.[1] ?? null;
+  const reg = bField ?? anyDate;
+  const firstRegistration = reg ? toDate(reg[1], reg[2], reg[3]) : null;
+  // Im Fahrzeugschein nur eindeutige Kennzeichen-Zeilen (Feld A) werten – sonst viele Fehltreffer
+  const licensePlate = findPlate(text, isRegistration);
 
   const found = [licensePlate, make, model, vin].filter(Boolean).length;
   return {
@@ -153,6 +288,53 @@ export function parseVehicleText(text: string): VehicleGuess {
         : "Modell & Farbe lassen sich am besten vom Fahrzeugschein auslesen."
       : "Kein Text erkannt. Tipp: Kennzeichen, FIN oder Fahrzeugschein formatfüllend und scharf fotografieren.",
   };
+}
+
+/** Plausibilität je Feld – entscheidet bei Gleichstand zwischen Durchläufen. */
+function fieldQuality(key: keyof VehicleGuess, value: string) {
+  switch (key) {
+    case "vin":
+      return (makeFromVin(value) ? 2 : 0) + (/\d{4}$/.test(value) ? 1 : 0);
+    case "model":
+      return /^[A-Za-z0-9ÄÖÜäöü][\w .\-/()ÄÖÜäöü]{0,24}$/.test(value) ? 1 : 0;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Führt die Ergebnisse mehrerer OCR-Durchläufe (verschiedene Bildaufbereitungen)
+ * zusammen: je Feld gewinnt der häufigste Wert, bei Gleichstand der plausibelste,
+ * danach der aus dem früheren Durchlauf.
+ */
+export function mergeVehicleGuesses(guesses: VehicleGuess[]): VehicleGuess {
+  if (guesses.length === 0) return parseVehicleText("");
+  const keys = ["licensePlate", "make", "model", "vin", "color", "firstRegistration"] as const;
+  const merged: VehicleGuess = { ...guesses[0] };
+  for (const key of keys) {
+    const votes = new Map<string, { count: number; first: number }>();
+    guesses.forEach((g, i) => {
+      const v = g[key];
+      if (!v) return;
+      const e = votes.get(v) ?? { count: 0, first: i };
+      e.count++;
+      votes.set(v, e);
+    });
+    const best = [...votes.entries()].sort(
+      ([av, a], [bv, b]) => b.count - a.count || fieldQuality(key, bv) - fieldQuality(key, av) || a.first - b.first,
+    )[0];
+    merged[key] = best ? best[0] : null;
+  }
+  const found = [merged.licensePlate, merged.make, merged.model, merged.vin].filter(Boolean).length;
+  merged.notes = found ? (merged.model ? null : guesses.find((g) => g.notes)?.notes ?? null) : guesses[guesses.length - 1].notes;
+  return merged;
+}
+
+/** Sind alle wichtigen Felder eines Fahrzeugscheins erkannt? */
+export function isCompleteRegistration(g: VehicleGuess) {
+  // FIN nur als sicher werten, wenn ihre Herstellerkennung zur erkannten Marke passt
+  const vinOk = Boolean(g.vin && makeFromVin(g.vin) && makeFromVin(g.vin)!.startsWith(g.make ?? "-"));
+  return Boolean(g.licensePlate && vinOk && g.make && g.model && g.firstRegistration);
 }
 
 function titleCase(s: string) {

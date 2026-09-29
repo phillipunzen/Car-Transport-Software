@@ -5,10 +5,11 @@ import { requireCtx } from "@/lib/org";
 import { customerName, formatDate, orderNo } from "@/lib/format";
 import { DAMAGE_AREAS, DAMAGE_SEVERITY, DAMAGE_TYPES, ORDER_STATUS } from "@/lib/labels";
 import { customerOptions } from "@/lib/queries";
+import { recognitionMode } from "@/lib/recognition";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { VehicleForm } from "@/components/vehicle-form";
 import { SubmitButton } from "@/components/submit-button";
-import { deleteVehicle, updateVehicle } from "../actions";
+import { deleteVehicle, deleteVehicleDocument, updateVehicle } from "../actions";
 
 export default async function VehiclePage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
@@ -17,6 +18,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
     where: { id, organizationId: ctx.orgId },
     include: {
       customer: true,
+      documents: { include: { file: true }, orderBy: { createdAt: "desc" } },
       orders: {
         orderBy: { createdAt: "desc" },
         include: { customer: true, protocols: true, damages: true },
@@ -57,7 +59,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-3">
           <Card title="Stammdaten">
-            <VehicleForm action={updateVehicle} vehicle={vehicle} customers={customers} />
+            <VehicleForm action={updateVehicle} vehicle={vehicle} customers={customers} recognition={recognitionMode()} />
           </Card>
           <form action={deleteVehicle}>
             <input type="hidden" name="id" value={vehicle.id} />
@@ -90,6 +92,35 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
                 <dd>{lastProtocol ? `${lastProtocol.mileage!.toLocaleString("de-DE")} km (${formatDate(lastProtocol.performedAt)})` : "–"}</dd>
               </div>
             </dl>
+          </Card>
+          <Card title={`Dokumente (${vehicle.documents.length})`}>
+            {vehicle.documents.length === 0 ? (
+              <p className="text-sm text-slate-500">Noch keine Dokumente – z. B. den Fahrzeugschein im Formular hinzufügen.</p>
+            ) : (
+              <ul className="grid grid-cols-2 gap-3">
+                {vehicle.documents.map((d) => (
+                  <li key={d.id} className="overflow-hidden rounded-lg border border-slate-200">
+                    <a href={`/api/files/${d.fileId}`} target="_blank" rel="noreferrer" className="block bg-slate-50">
+                      {d.file.mimeType === "application/pdf" ? (
+                        <div className="flex aspect-[4/3] items-center justify-center text-sm font-semibold text-slate-500">PDF</div>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`/api/files/${d.fileId}`} alt="Fahrzeugdokument" loading="lazy" className="aspect-[4/3] w-full object-cover" />
+                      )}
+                    </a>
+                    <div className="flex items-center justify-between gap-1 px-2 py-1.5 text-xs">
+                      <span className="truncate text-slate-500">{formatDate(d.createdAt)}</span>
+                      <form action={deleteVehicleDocument}>
+                        <input type="hidden" name="documentId" value={d.id} />
+                        <SubmitButton className="text-red-500" pendingText="…" confirm="Dokument löschen?">
+                          Löschen
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           {lastOrderWithDamages && (
             <Card title="Zuletzt dokumentierte Schäden">

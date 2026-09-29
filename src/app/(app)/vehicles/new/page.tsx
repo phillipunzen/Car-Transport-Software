@@ -1,5 +1,6 @@
 import { requireCtx } from "@/lib/org";
 import { customerOptions } from "@/lib/queries";
+import { recognitionMode } from "@/lib/recognition";
 import { Card, PageHeader } from "@/components/ui";
 import { VehicleForm } from "@/components/vehicle-form";
 import { createVehicle } from "../actions";
@@ -13,7 +14,7 @@ export default async function NewVehiclePage() {
     <>
       <PageHeader title="Neues Fahrzeug" back={{ href: "/vehicles", label: "Fahrzeuge" }} />
       <Card>
-        <VehicleForm action={createVehicle} customers={customers} />
+        <VehicleForm action={createVehicle} customers={customers} recognition={recognitionMode()} />
       </Card>
     </>
   );

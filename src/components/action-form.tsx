@@ -17,17 +17,24 @@ export function ActionForm({
   className = "space-y-4",
   resetOnSuccess = false,
   onSubmitStart,
+  onSuccess,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   children: ReactNode;
   className?: string;
   resetOnSuccess?: boolean;
   onSubmitStart?: () => void;
+  onSuccess?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
   useEffect(() => {
-    if (resetOnSuccess && state?.ok) ref.current?.reset();
+    if (state?.ok) {
+      if (resetOnSuccess) ref.current?.reset();
+      onSuccessRef.current?.();
+    }
   }, [state, resetOnSuccess]);
   useEffect(() => {
     if (state?.error) ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });

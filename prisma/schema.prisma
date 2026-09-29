@@ -173,10 +173,11 @@ model File {
   uploadedById   String?
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy   User?             @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   photos       Photo[]
   expenses     Expense[]
+  vehicleDocs  VehicleDocument[]
 
   @@index([organizationId])
 }
@@ -237,13 +238,28 @@ model Vehicle {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   orders       Order[]
+  documents    VehicleDocument[]
 
   @@index([organizationId, vin])
   @@index([organizationId, licensePlate])
   @@index([customerId])
+}
+
+// Dokumente zum Fahrzeug, z. B. Fahrzeugschein (Foto oder PDF)
+model VehicleDocument {
+  id        String   @id @default(cuid())
+  vehicleId String
+  fileId    String
+  kind      String   @default("REGISTRATION") // REGISTRATION = Fahrzeugschein, OTHER
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  file    File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
 }
 
 // ---------------------------------------------------------------------------

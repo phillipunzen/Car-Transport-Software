@@ -18,6 +18,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Übersicht aller bekannten Fahrzeuge – wird beim Speichern von Aufträgen automatisch gepflegt (Zuordnung über FIN, sonst Kennzeichen)
 - Beim Anlegen eines Auftrags bekanntes Fahrzeug suchen und übernehmen; bei Eingabe einer bekannten FIN/eines Kennzeichens erscheint ein Übernahme-Hinweis
 - Fahrzeugdetails mit Auftragshistorie, letztem Kilometerstand und zuletzt dokumentierten Schäden
+- Neues Fahrzeug direkt aus dem **Fahrzeugschein** anlegen (Foto oder PDF) – die Daten werden ausgelesen und das Dokument am Fahrzeug gespeichert
 
 **Fahrzeug & Zustand**
 - Fotos direkt aus der Handykamera, getrennt nach *Abholung* und *Übergabe*, mit Kategorien (Front, Heck, Innenraum, Tacho, FIN …); Bilder werden vor dem Upload im Browser verkleinert
@@ -56,7 +57,7 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - MySQL 8 via Prisma ORM
 - Auth.js (NextAuth v5) – Credentials, Google, Apple
 - PDF-Erzeugung mit PDFKit, QR-Codes mit `qrcode`
-- Erkennung: lokal mit Tesseract (OCR, WebAssembly) + `unpdf` für PDF-Belege, optional Claude-API (Anthropic, Vision + Structured Outputs)
+- Erkennung: lokal mit Tesseract (OCR, WebAssembly), Bildaufbereitung mit `sharp` (Schattenausgleich, Grünkanal gegen Formularlinien, mehrere Durchläufe mit Abstimmung) + `unpdf` für PDF-Belege, optional Claude-API (Anthropic, Vision + Structured Outputs)
 - Dateien lokal (Docker-Volume) oder S3-kompatibel (für mehrere Instanzen)
 - Docker-Image (standalone, non-root) mit automatischen Datenbank-Migrationen und Healthcheck (`/api/health`)
 
@@ -117,7 +118,7 @@ Die Anwendung wählt die Erkennungsmethode automatisch:
 | Kennzeichen | wenn formatfüllend fotografiert | auch auf Fahrzeugfotos |
 | Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
 
-Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen gerade, scharf und formatfüllend fotografieren. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
+Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen scharf und formatfüllend fotografieren. Schatten und leichte Schräglage gleicht die Aufbereitung aus; stark verwackelte Fotos bleiben schwierig. Beim Fahrzeugschein wird der feste Aufbau der Zulassungsbescheinigung Teil I ausgewertet (Felder A, B, D.1, D.3, E), die Plausibilität der FIN geprüft (Herstellerkennung, Prüfziffer) – unsichere Werte bleiben lieber leer als falsch. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
 
 ### Standort & Streckenberechnung
 
