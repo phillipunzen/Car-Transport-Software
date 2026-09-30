@@ -59,6 +59,15 @@ export function emailDocumentsProps({
       checked: focus === "invoice",
       downloadUrl: `/api/invoices/${invoice.id}/pdf`,
     });
+    docs.push({
+      key: "XRECHNUNG",
+      label: "E-Rechnung als XML (XRechnung)",
+      available: Boolean(invoiceIssued),
+      hint: invoice.status === "DRAFT" ? "noch nicht festgeschrieben" : "storniert",
+      // Behörden (Leitweg-ID) erwarten die reine XML-Datei; sonst reicht das PDF mit eingebetteter E-Rechnung
+      checked: focus === "invoice" && Boolean(customer.buyerReference),
+      downloadUrl: `/api/invoices/${invoice.id}/xml`,
+    });
   }
 
   const ref = order ? `Auftrag ${orderNo(order.number)}${order.reference ? ` / Ihre Referenz ${order.reference}` : ""}` : "";

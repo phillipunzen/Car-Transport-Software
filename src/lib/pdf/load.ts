@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { orderNo } from "@/lib/format";
 import { renderProtocolPdf } from "@/lib/pdf/protocol";
 import { renderInvoicePdf } from "@/lib/pdf/invoice";
+import { buildEInvoiceXml } from "@/lib/einvoice";
 
 /** Erzeugt ein Protokoll-PDF (oder null, wenn es das Protokoll nicht gibt). */
 export async function protocolPdf(orgId: string, orderId: string, type: "PICKUP" | "DELIVERY") {
@@ -37,6 +38,16 @@ export async function invoicePdf(orgId: string, invoiceId: string) {
   if (!invoice) return null;
   const pdf = await renderInvoicePdf(invoice.organization, invoice);
   return { pdf, filename: invoice.number ? `Rechnung_${invoice.number}.pdf` : "Rechnungsentwurf.pdf" };
+}
+
+/** E-Rechnung als reine XML-Datei (XRechnung, CII) – nur für festgeschriebene Rechnungen. */
+export async function invoiceXml(orgId: string, invoiceId: string) {
+  const invoice = await db.invoice.findFirst({
+    where: { id: invoiceId, organizationId: orgId, status: { not: "DRAFT" } },
+    include: { items: { orderBy: { position: "asc" } }, customer: true, order: true, organization: true },
+  });
+  if (!invoice?.number) return null;
+  return { xml: buildEInvoiceXml(invoice.organization, invoice), filename: `XRechnung_${invoice.number}.xml` };
 }
 
 /** Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen). */

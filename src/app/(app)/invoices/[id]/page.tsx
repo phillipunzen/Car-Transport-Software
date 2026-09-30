@@ -6,6 +6,7 @@ import { customerName, formatDate, formatMoney, orderNo, toDateTimeLocal, toNumb
 import { INVOICE_STATUS } from "@/lib/labels";
 import { computeTotals } from "@/lib/invoice";
 import { Badge, Card, PageHeader } from "@/components/ui";
+import { einvoiceIssues } from "@/lib/einvoice";
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { SubmitButton } from "@/components/submit-button";
 import { EmailDocuments } from "@/components/email-documents";
@@ -72,6 +73,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             : {missing.join(", ")}.
           </div>
         )}
+        {missing.length === 0 && einvoiceIssues(ctx.org, invoice).length > 0 && (
+          <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Hinweis E-Rechnung: Für eine vollständige XRechnung fehlen noch {einvoiceIssues(ctx.org, invoice).join(", ")}.
+          </div>
+        )}
         <InvoiceEditor
           defaultVat={ctx.org.smallBusiness ? 0 : toNumber(ctx.org.defaultVatRate)}
           invoice={{
@@ -103,6 +109,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     );
   }
 
+  const eIssues = einvoiceIssues(ctx.org, invoice);
   const totals = computeTotals(
     invoice.items.map((i) => ({ description: i.description, unit: i.unit, quantity: toNumber(i.quantity), unitPrice: toNumber(i.unitPrice), vatRate: toNumber(i.vatRate) })),
     invoice.smallBusiness,
@@ -203,6 +210,17 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 />
               </div>
             )}
+          </Card>
+          <Card title="E-Rechnung">
+            <p className="text-sm text-slate-600">
+              Das PDF enthält die E-Rechnung bereits eingebettet (ZUGFeRD/Factur-X, Profil XRechnung). Für Behörden oder Portale gibt es die reine XML-Datei.
+            </p>
+            {eIssues.length > 0 && (
+              <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">Für eine vollständige E-Rechnung fehlt noch: {eIssues.join(", ")}.</p>
+            )}
+            <a href={`/api/invoices/${invoice.id}/xml`} className="btn-secondary mt-3 w-full">
+              XRechnung (XML) herunterladen
+            </a>
           </Card>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { sendDocumentsEmail } from "@/app/(app)/orders/email-actions";
 
 export type EmailDoc = {
-  key: "PICKUP" | "DELIVERY" | "INVOICE";
+  key: "PICKUP" | "DELIVERY" | "INVOICE" | "XRECHNUNG" | "DAMAGE" | "QUOTE" | "DUNNING";
   label: string;
   available: boolean; // z. B. Protokoll abgeschlossen / Rechnung festgeschrieben
   hint?: string; // Grund, falls nicht verfügbar

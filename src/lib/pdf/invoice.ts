@@ -3,6 +3,7 @@ import type { Customer, Invoice, InvoiceItem, Order, Organization } from "@prism
 import { customerNo, formatDate, formatMoney, orderNo, toNumber } from "@/lib/format";
 import { computeTotals } from "@/lib/invoice";
 import { discountInfo } from "@/lib/pricing";
+import { buildEInvoiceXml } from "@/lib/einvoice";
 import { COLORS, CONTENT_W, MARGIN, PAGE_W, createDoc, drawFooters, drawLogo, ensureSpace, senderLine, t, toBuffer } from "./common";
 
 type Full = Invoice & { items: InvoiceItem[]; customer: Customer; order: Order | null };
@@ -29,7 +30,9 @@ async function giroCode(org: Organization, amount: number, reference: string) {
 export async function renderInvoicePdf(org: Organization, invoice: Full) {
   const isCredit = toNumber(invoice.grossTotal) < 0;
   const title = invoice.status === "DRAFT" ? "Rechnungsentwurf" : isCredit ? "Stornorechnung" : "Rechnung";
-  const doc = createDoc(`${title} ${invoice.number ?? ""}`.trim());
+  // Festgeschriebene Rechnungen als ZUGFeRD/Factur-X: PDF/A-3 mit eingebetteter E-Rechnung (XML)
+  const embedXml = invoice.status !== "DRAFT" && Boolean(invoice.number);
+  const doc = createDoc(`${title} ${invoice.number ?? ""}`.trim(), { pdfa: embedXml });
 
   await drawLogo(doc, org);
 
@@ -167,5 +170,44 @@ export async function renderInvoicePdf(org: Organization, invoice: Full) {
   }
 
   drawFooters(doc, org);
+  if (embedXml && doc.isPdfA) attachFacturX(doc, buildEInvoiceXml(org, invoice));
   return toBuffer(doc);
+}
+
+const FX_NS = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
+
+/** Hängt die XML-Rechnung nach Factur-X/ZUGFeRD-Konvention an (Dateiname, AFRelationship, XMP-Metadaten). */
+function attachFacturX(doc: PDFKit.PDFDocument, xml: string) {
+  const now = new Date();
+  doc.file(Buffer.from(xml, "utf8"), {
+    name: "factur-x.xml",
+    type: "text/xml",
+    description: "Factur-X / ZUGFeRD / XRechnung",
+    relationship: "Alternative",
+    creationDate: now,
+    modifiedDate: now,
+    hidden: false,
+  } as PDFKit.Mixins.PDFAttachmentOptions);
+  const prop = (name: string, desc: string) =>
+    `<rdf:li rdf:parseType="Resource"><pdfaProperty:name>${name}</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>${desc}</pdfaProperty:description></rdf:li>`;
+  (doc as unknown as { appendXML(x: string): void }).appendXML(`
+<rdf:Description rdf:about="" xmlns:fx="${FX_NS}">
+<fx:DocumentType>INVOICE</fx:DocumentType>
+<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>
+<fx:Version>1.0</fx:Version>
+<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>
+</rdf:Description>
+<rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+<pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+<pdfaSchema:namespaceURI>${FX_NS}</pdfaSchema:namespaceURI>
+<pdfaSchema:prefix>fx</pdfaSchema:prefix>
+<pdfaSchema:property><rdf:Seq>
+${prop("DocumentFileName", "name of the embedded XML invoice file")}
+${prop("DocumentType", "INVOICE")}
+${prop("Version", "The actual version of the Factur-X XML schema")}
+${prop("ConformanceLevel", "The conformance level of the embedded Factur-X data")}
+</rdf:Seq></pdfaSchema:property>
+</rdf:li></rdf:Bag></pdfaExtension:schemas>
+</rdf:Description>`);
 }

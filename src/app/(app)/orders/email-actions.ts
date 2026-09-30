@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { mailEnabled, sendMailWith } from "@/lib/mail";
-import { invoicePdf, protocolPdf } from "@/lib/pdf/load";
+import { invoicePdf, invoiceXml, protocolPdf } from "@/lib/pdf/load";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "./actions";
 
@@ -42,7 +42,7 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
   const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
   const names: string[] = [];
   for (const doc of docs) {
-    let result: { pdf: Buffer; filename: string } | null = null;
+    let result: { pdf: Buffer; filename: string; contentType?: string } | null = null;
     if ((doc === "PICKUP" || doc === "DELIVERY") && orderId) {
       const protocol = await db.protocol.findUnique({ where: { orderId_type: { orderId, type: doc } } });
       if (!protocol?.completedAt) return { error: `Das ${doc === "PICKUP" ? "Abholprotokoll" : "Übergabeprotokoll"} ist noch nicht abgeschlossen.` };
@@ -53,8 +53,13 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
       if (!inv || inv.status === "DRAFT") return { error: "Nur festgeschriebene Rechnungen können versendet werden." };
       result = await invoicePdf(ctx.orgId, invoiceId);
       names.push(`Rechnung ${inv.number}`);
+    } else if (doc === "XRECHNUNG" && invoiceId) {
+      const x = await invoiceXml(ctx.orgId, invoiceId);
+      if (!x) return { error: "Die E-Rechnung gibt es erst nach dem Festschreiben." };
+      result = { pdf: Buffer.from(x.xml, "utf8"), filename: x.filename, contentType: "application/xml" };
+      names.push("E-Rechnung (XML)");
     }
-    if (result) attachments.push({ filename: result.filename, content: result.pdf, contentType: "application/pdf" });
+    if (result) attachments.push({ filename: result.filename, content: result.pdf, contentType: result.contentType ?? "application/pdf" });
   }
   if (attachments.length === 0) return { error: "Keine Dokumente zum Versenden gefunden." };
 

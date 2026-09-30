@@ -4,9 +4,12 @@ const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["pdfkit", "@prisma/client", "bcryptjs", "tesseract.js", "tesseract.js-core", "unpdf"],
   outputFileTracingIncludes: {
-    "/api/**/*": ["./node_modules/pdfkit/js/**/*"],
+    // PDF-Erzeugung (Routen und Server-Aktionen wie E-Mail-Versand): Schriftdaten, ICC-Profil, eingebettete Schriften
+    "/api/**/*": ["./node_modules/pdfkit/js/**/*", "./assets/fonts/**/*"],
     // Lokale Texterkennung: WASM-Kern und deutsche Sprachdaten mitliefern
     "/**/*": [
+      "./node_modules/pdfkit/js/**/*",
+      "./assets/fonts/**/*",
       "./node_modules/tesseract.js/**/*",
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/zlibjs/**/*",

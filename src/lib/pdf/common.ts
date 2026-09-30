@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import PDFDocument from "pdfkit";
 import type { Organization } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -20,15 +22,29 @@ export function t(s: string | null | undefined) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF€„“”‚‘’–—…•]/g, "");
 }
 
-export function createDoc(title: string) {
+const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
+const FONTS = { Helvetica: "LiberationSans-Regular.ttf", "Helvetica-Bold": "LiberationSans-Bold.ttf" };
+const fontsAvailable = () => Object.values(FONTS).every((f) => existsSync(path.join(FONT_DIR, f)));
+
+/**
+ * Neues A4-Dokument. Es werden eingebettete Schriften (Liberation Sans, metrisch identisch zu Helvetica/Arial)
+ * unter den Namen "Helvetica"/"Helvetica-Bold" registriert – nötig für PDF/A (E-Rechnung).
+ */
+export function createDoc(title: string, opts: { pdfa?: boolean } = {}) {
+  const embed = fontsAvailable();
+  const pdfa = Boolean(opts.pdfa && embed);
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: MARGIN, bottom: MARGIN + FOOTER_H, left: MARGIN, right: MARGIN },
     bufferPages: true,
     info: { Title: title, Creator: "Überführung" },
+    // Ohne eigene Startschrift würde PDFKit die nicht eingebettete Standard-Helvetica zwischenspeichern
+    ...(embed ? { font: path.join(FONT_DIR, FONTS.Helvetica) } : {}),
+    ...(pdfa ? { pdfVersion: "1.7" as const, subset: "PDF/A-3b" as const, displayTitle: true } : {}),
   });
+  if (embed) for (const [name, file] of Object.entries(FONTS)) doc.registerFont(name, path.join(FONT_DIR, file));
   doc.font("Helvetica").fillColor(COLORS.text);
-  return doc;
+  return Object.assign(doc, { isPdfA: pdfa });
 }
 
 export function toBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
