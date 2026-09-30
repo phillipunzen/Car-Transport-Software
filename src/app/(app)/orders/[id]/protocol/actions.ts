@@ -8,7 +8,7 @@ import { decimal, fromDateTimeLocal, str } from "@/lib/format";
 import { CHECKLIST_ITEMS } from "@/lib/labels";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../../actions";
-import { notifyCustomerStatus } from "@/lib/tracking";
+import { notifyCustomerStatus, sendReviewRequest } from "@/lib/tracking";
 import { orderWhere } from "@/lib/permissions";
 
 const isSignature = (v: string | null) => (v && v.startsWith("data:image/png;base64,") && v.length < 2_000_000 ? v : null);
@@ -68,6 +68,7 @@ export async function saveProtocol(_: FormState, formData: FormData): Promise<Fo
     }
     await logEvent(orderId, ctx, `${label} abgeschlossen`);
     await notifyCustomerStatus(orderId, type, ctx.user.name ?? ctx.user.email ?? "");
+    if (type === "DELIVERY") await sendReviewRequest(orderId);
   } else {
     await logEvent(orderId, ctx, `${label} gespeichert`);
   }

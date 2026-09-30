@@ -178,6 +178,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   ? `${formatNumber(mileage.driven, 0)} km${km ? ` (geplant ${formatNumber(km, 0)} km)` : ""}${mileage.message ? ` – ⚠️ ${mileage.message}` : ""}`
                   : null,
               ],
+              ["Kundenbewertung", !driver && order.feedbackRating ? `${"★".repeat(order.feedbackRating)}${"☆".repeat(5 - order.feedbackRating)}${order.feedbackComment ? ` – „${order.feedbackComment}“` : ""}` : null],
               ["Tank / Ladung", pickupP?.fuelLevel != null && deliveryP?.fuelLevel != null ? `${pickupP.fuelLevel} % → ${deliveryP.fuelLevel} %` : null],
             ]}
           />

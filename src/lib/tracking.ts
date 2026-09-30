@@ -71,3 +71,37 @@ ${company}`;
     console.error("Kundenbenachrichtigung fehlgeschlagen", e);
   }
 }
+
+/**
+ * Modul Bewertungen: nach der Zustellung eine kurze Zufriedenheitsabfrage senden (einmal pro Auftrag).
+ * Die Sterne-Links öffnen nur die Seite – gespeichert wird erst nach dem Bestätigen (E-Mail-Scanner klicken Links sonst mit).
+ */
+export async function sendReviewRequest(orderId: string) {
+  try {
+    const order = await db.order.findUnique({ where: { id: orderId }, include: { customer: true, organization: true } });
+    if (!order || order.feedbackToken || !order.organization.moduleReviews || !order.organization.reviewUrl || !mailEnabled() || !order.customer.email) return;
+    const org = order.organization;
+    const token = randomBytes(18).toString("base64url");
+    await db.order.update({ where: { id: order.id }, data: { feedbackToken: token } });
+    const company = org.companyName ?? org.name;
+    const c = order.customer;
+    const greeting = c.lastName ? `Guten Tag ${[c.firstName, c.lastName].filter(Boolean).join(" ")}` : "Guten Tag";
+    const stars = [5, 4, 3, 2, 1].map((n) => `${"★".repeat(n)}${"☆".repeat(5 - n)}  ${appUrl()}/r/${token}?s=${n}`).join("\n");
+    await sendMailWith({
+      to: c.email!,
+      subject: `Wie zufrieden waren Sie? – Überführung ${orderNo(order.number)}`,
+      text: `${greeting},
+
+Ihr Fahrzeug wurde übergeben. Wir würden uns sehr über eine kurze Rückmeldung freuen – ein Klick genügt:
+
+${stars}
+
+Vielen Dank!
+${company}`,
+      fromName: company,
+      replyTo: org.email ?? undefined,
+    });
+  } catch (e) {
+    console.error("Bewertungsanfrage fehlgeschlagen", e);
+  }
+}
