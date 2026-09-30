@@ -839,6 +839,7 @@ model BankTransaction {
   counterparty   String?
   purpose        String?  @db.Text
   invoiceId      String?
+  ignored        Boolean  @default(false) // bewusst keiner Rechnung zugeordnet
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
