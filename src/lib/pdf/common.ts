@@ -12,19 +12,27 @@ export const CONTENT_W = PAGE_W - 2 * MARGIN;
 export const FOOTER_H = 70;
 export const COLORS = { text: "#0f172a", muted: "#64748b", line: "#cbd5e1", accent: "#1d64e0", light: "#f1f5f9" };
 
-/** Die Standardschriften von PDFKit kennen nur WinAnsi – Sonderzeichen ersetzen. */
-export function t(s: string | null | undefined) {
-  return (s ?? "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/→/g, "->")
-    .replace(/[✓✔]/g, "x")
-    .replace(/[✗✕]/g, "-")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF€„“”‚‘’–—…•]/g, "");
-}
-
 const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
 const FONTS = { Helvetica: "LiberationSans-Regular.ttf", "Helvetica-Bold": "LiberationSans-Bold.ttf" };
-const fontsAvailable = () => Object.values(FONTS).every((f) => existsSync(path.join(FONT_DIR, f)));
+let fontsChecked: boolean | null = null;
+const fontsAvailable = () => (fontsChecked ??= Object.values(FONTS).every((f) => existsSync(path.join(FONT_DIR, f))));
+
+/**
+ * Text für PDFs vorbereiten. Mit eingebetteter Schrift (Liberation Sans) gehen alle europäischen Zeichen;
+ * ohne sie kennen die Standardschriften nur WinAnsi – dann Sonderzeichen ersetzen.
+ */
+export function t(s: string | null | undefined) {
+  const base = (s ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[✓✔]/g, "x")
+    .replace(/[✗✕]/g, "-");
+  if (fontsAvailable()) {
+    // Emojis und Steuerzeichen hat die Schrift nicht
+    return base.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u2600-\u27BF\uFE0F]|[\uD800-\uDFFF]/g, "");
+  }
+  return base.replace(/→/g, "->").replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF€„“”‚‘’–—…•]/g, "");
+}
+
 
 /**
  * Neues A4-Dokument. Es werden eingebettete Schriften (Liberation Sans, metrisch identisch zu Helvetica/Arial)

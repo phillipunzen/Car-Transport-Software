@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { returnCost } from "@/lib/pricing";
+import { trackingUrl } from "@/lib/tracking";
+import { TrackingLink } from "@/components/tracking-link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
-import { customerName, formatDateTime, formatMoney, formatNumber, toNumber } from "@/lib/format";
+import { customerName, orderNo, formatDateTime, formatMoney, formatNumber, toNumber } from "@/lib/format";
 import { INVOICE_STATUS, ORDER_STATUS, RETURN_TYPE, TRANSPORT_MODE } from "@/lib/labels";
 import { Badge, Card, Dl } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
@@ -51,6 +53,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       expenses: true,
       invoices: { orderBy: { createdAt: "desc" } },
       events: { orderBy: { createdAt: "desc" }, take: 20 },
+      _count: { select: { damages: { where: { stage: "DELIVERY" } } } },
     },
   });
   if (!order) notFound();
@@ -127,7 +130,23 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 protocols: order.protocols,
                 invoice: order.invoices.find((i) => i.status !== "CANCELLED") ?? null,
                 focus: "protocols",
+                deliveryDamages: order._count.damages,
               })}
+            />
+            {order._count.damages > 0 && (
+              <a href={`/api/orders/${order.id}/damage-report`} target="_blank" rel="noreferrer" className="btn-secondary mt-2 w-full">
+                ⚠️ Schadensmeldung (PDF)
+              </a>
+            )}
+          </Card>
+        )}
+        {order.status !== "CANCELLED" && (
+          <Card title="Status-Link für den Kunden">
+            <TrackingLink
+              orderId={order.id}
+              url={order.trackingToken ? trackingUrl(order.trackingToken) : null}
+              email={order.customer.email}
+              text={`Den aktuellen Stand Ihrer Fahrzeugüberführung ${orderNo(order.number)} sehen Sie hier:`}
             />
           </Card>
         )}

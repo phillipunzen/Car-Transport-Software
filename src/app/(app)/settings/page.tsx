@@ -1,6 +1,7 @@
 import { canManage, requireCtx } from "@/lib/org";
 import { toNumber } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
+import { appUrl } from "@/lib/mail";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, Field, PageHeader, TextArea } from "@/components/ui";
@@ -114,6 +115,44 @@ export default async function SettingsPage() {
               <Field label="Gebühr 1. Mahnung (€)" name="dunningFee2" defaultValue={toNumber(o.dunningFee2)} inputMode="decimal" />
               <Field label="Gebühr 2. Mahnung (€)" name="dunningFee3" defaultValue={toNumber(o.dunningFee3)} inputMode="decimal" />
               <Field label="Neue Zahlungsfrist (Tage)" name="dunningDays" type="number" min={1} defaultValue={o.dunningDays} />
+            </div>
+          </Card>
+
+          <Card title="Kundenservice">
+            <div className="space-y-4">
+              <label className="flex items-start gap-2 font-normal">
+                <input type="checkbox" name="notifyCustomerOnStatus" defaultChecked={o.notifyCustomerOnStatus} className="mt-0.5 h-4 w-4 accent-brand-600" />
+                <span>
+                  Kunden bei Abholung und Zustellung automatisch per E-Mail informieren
+                  <span className="block text-xs text-slate-500">
+                    Mit Status-Link; bei der Zustellung wird das Übergabeprotokoll angehängt. Voraussetzung: E-Mail-Versand (SMTP) ist eingerichtet und beim Kunden ist eine E-Mail-Adresse hinterlegt.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 font-normal">
+                <input type="checkbox" name="requestEnabled" defaultChecked={o.requestEnabled} className="mt-0.5 h-4 w-4 accent-brand-600" />
+                <span>
+                  Öffentliches Anfrageformular aktivieren
+                  <span className="block text-xs text-slate-500">Kunden können über einen Link oder auf deiner Website Überführungen anfragen. Anfragen landen unter „Angebote → Anfragen“.</span>
+                </span>
+              </label>
+              {o.requestEnabled && o.requestToken && (
+                <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                  <p className="font-medium">Link zum Formular</p>
+                  <input readOnly value={`${appUrl()}/anfrage/${o.requestToken}`} className="input font-mono text-xs" aria-label="Link zum Anfrageformular" />
+                  <p className="mt-3 font-medium">Auf der eigenen Website einbinden</p>
+                  <textarea
+                    readOnly
+                    rows={3}
+                    className="input font-mono text-xs"
+                    aria-label="HTML-Code zum Einbinden"
+                    value={`<iframe src="${appUrl()}/anfrage/${o.requestToken}?embed=1" style="width:100%;min-height:1100px;border:0" title="Überführung anfragen"></iframe>`}
+                  />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Den Code einfach in eine Seite deiner Website (z. B. WordPress-Block „Individuelles HTML“) einfügen. Deaktivieren macht den Link sofort unbrauchbar.
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
 

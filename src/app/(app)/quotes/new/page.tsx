@@ -4,7 +4,6 @@ import { customerOptions } from "@/lib/queries";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
 import { effectiveConditions } from "@/lib/pricing";
-import { toDateTimeLocal } from "@/lib/format";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { createQuote } from "../actions";
@@ -42,7 +41,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
             licensePlate: inq.licensePlate,
             make: inq.make,
             model: inq.model,
-            pickupDate: inq.pickupDate && /^\d{4}-\d{2}-\d{2}/.test(inq.pickupDate) ? toDateTimeLocal(new Date(inq.pickupDate)) : null,
+            // Wunschtermin (nur Datum) → 9:00 Uhr als Vorschlag
+            pickupDate: inq.pickupDate && /^\d{4}-\d{2}-\d{2}$/.test(inq.pickupDate) ? `${inq.pickupDate}T09:00` : null,
           }).filter(([, v]) => v),
         ) as Record<string, string>,
       );

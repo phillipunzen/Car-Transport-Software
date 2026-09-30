@@ -62,9 +62,22 @@ export default async function ProtocolPage({ params }: { params: Promise<{ id: s
             <a href={`/api/orders/${order.id}/protocol/${rawType}/pdf`} target="_blank" rel="noreferrer" className="btn-secondary">
               PDF herunterladen
             </a>
+            {type === "DELIVERY" && order.damages.length > 0 && (
+              <a href={`/api/orders/${order.id}/damage-report`} target="_blank" rel="noreferrer" className="btn-secondary">
+                ⚠️ Schadensmeldung
+              </a>
+            )}
             <EmailDocuments
               className="btn-primary"
-              {...emailDocumentsProps({ org: ctx.org, order, customer: order.customer, protocols: order.protocols, invoice: null, focus: "protocols" })}
+              {...emailDocumentsProps({
+                org: ctx.org,
+                order,
+                customer: order.customer,
+                protocols: order.protocols,
+                invoice: null,
+                focus: "protocols",
+                deliveryDamages: type === "DELIVERY" ? order.damages.length : 0,
+              })}
             />
             {canManage(ctx.role) && (
               <form action={reopenProtocol}>

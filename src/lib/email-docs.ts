@@ -17,6 +17,7 @@ export function emailDocumentsProps({
   focus,
   dunning,
   dunningTotal,
+  deliveryDamages = 0,
 }: {
   org: Organization;
   order: Order | null;
@@ -26,6 +27,8 @@ export function emailDocumentsProps({
   focus: "protocols" | "invoice" | "dunning";
   dunning?: Dunning | null;
   dunningTotal?: number;
+  /** Anzahl der bei der Übergabe erfassten Schäden → Schadensmeldung anbieten */
+  deliveryDamages?: number;
 }) {
   const done = (t: "PICKUP" | "DELIVERY") => protocols.some((p) => p.type === t && p.completedAt);
   const vehicle = order ? [order.make, order.model].filter(Boolean).join(" ") : "";
@@ -54,6 +57,15 @@ export function emailDocumentsProps({
         downloadUrl: `/api/orders/${order.id}/protocol/delivery/pdf`,
       },
     );
+  }
+  if (order && deliveryDamages > 0) {
+    docs.push({
+      key: "DAMAGE",
+      label: `Schadensmeldung (${deliveryDamages} ${deliveryDamages === 1 ? "Schaden" : "Schäden"})`,
+      available: true,
+      checked: false,
+      downloadUrl: `/api/orders/${order.id}/damage-report`,
+    });
   }
   if (dunning) {
     docs.push({

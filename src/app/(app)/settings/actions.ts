@@ -1,8 +1,8 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import type { Role } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { RETURN_TYPE } from "@/lib/labels";
 import { db } from "@/lib/db";
@@ -30,6 +30,7 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
   const money = (name: string, fallback: number) => Math.max(0, decimal(formData.get(name)) ?? fallback);
   const returnType = String(formData.get("defaultReturnType") ?? "NONE");
 
+  const requestEnabled = formData.get("requestEnabled") === "on";
   let logoFileId = ctx.org.logoFileId;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
@@ -83,6 +84,11 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
       dunningFee2: money("dunningFee2", 5),
       dunningFee3: money("dunningFee3", 10),
       dunningDays: Math.max(1, Math.round(decimal(formData.get("dunningDays")) ?? 7)),
+      notifyCustomerOnStatus: formData.get("notifyCustomerOnStatus") === "on",
+      requestEnabled,
+      // Beim Aktivieren einen neuen, nicht erratbaren Link erzeugen
+      ...(requestEnabled && !ctx.org.requestToken ? { requestToken: randomBytes(12).toString("base64url") } : {}),
+      ...(!requestEnabled ? { requestToken: null } : {}),
       logoFileId,
     },
   });

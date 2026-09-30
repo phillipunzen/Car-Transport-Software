@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { mailEnabled, sendMailWith } from "@/lib/mail";
-import { dunningPdf, invoicePdf, invoiceXml, protocolPdf, quotePdf } from "@/lib/pdf/load";
+import { damageReportPdf, dunningPdf, invoicePdf, invoiceXml, protocolPdf, quotePdf } from "@/lib/pdf/load";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "./actions";
 
@@ -63,6 +63,10 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
       result = dunningId ? await dunningPdf(ctx.orgId, dunningId) : null;
       if (!result) return { error: "Mahnung nicht gefunden." };
       names.push(result.filename.replace(/_/g, " ").replace(/\.pdf$/, ""));
+    } else if (doc === "DAMAGE" && orderId) {
+      result = await damageReportPdf(ctx.orgId, orderId);
+      if (!result) return { error: "Bei der Übergabe wurden keine Schäden erfasst." };
+      names.push("Schadensmeldung");
     } else if (doc === "QUOTE") {
       const quoteId = String(formData.get("quoteId") ?? "");
       result = quoteId ? await quotePdf(ctx.orgId, quoteId) : null;

@@ -5,6 +5,7 @@ import { renderInvoicePdf } from "@/lib/pdf/invoice";
 import { buildEInvoiceXml } from "@/lib/einvoice";
 import { renderDunningPdf } from "@/lib/pdf/dunning";
 import { renderQuotePdf } from "@/lib/pdf/quote";
+import { renderDamageReportPdf } from "@/lib/pdf/damage-report";
 import { DUNNING_LEVEL } from "@/lib/dunning";
 
 /** Erzeugt ein Protokoll-PDF (oder null, wenn es das Protokoll nicht gibt). */
@@ -73,6 +74,32 @@ export async function quotePdf(orgId: string, quoteId: string) {
   });
   if (!quote) return null;
   return { pdf: await renderQuotePdf(quote.organization, quote), filename: `Angebot_${quote.number}.pdf` };
+}
+
+/** Schadensmeldung (Vergleich Abholung/Übergabe) – nur wenn bei der Übergabe Schäden erfasst wurden. */
+export async function damageReportPdf(orgId: string, orderId: string) {
+  const order = await db.order.findFirst({
+    where: { id: orderId, organizationId: orgId },
+    include: {
+      customer: true,
+      assignedTo: true,
+      organization: true,
+      protocols: { include: { performedBy: true } },
+      damages: { orderBy: { createdAt: "asc" }, include: { photo: { select: { fileId: true } } } },
+    },
+  });
+  if (!order) return null;
+  const deliveryDamages = order.damages.filter((d) => d.stage === "DELIVERY");
+  if (deliveryDamages.length === 0) return null;
+  const pdf = await renderDamageReportPdf({
+    org: order.organization,
+    order,
+    pickup: order.protocols.find((p) => p.type === "PICKUP") ?? null,
+    delivery: order.protocols.find((p) => p.type === "DELIVERY") ?? null,
+    pickupDamages: order.damages.filter((d) => d.stage === "PICKUP"),
+    deliveryDamages,
+  });
+  return { pdf, filename: `Schadensmeldung_${orderNo(order.number)}.pdf` };
 }
 
 /** Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen). */
