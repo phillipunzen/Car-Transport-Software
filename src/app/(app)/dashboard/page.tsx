@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { customerName, formatDateTime, formatMoney, orderNo, toNumber } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
+import { berlinDay, dayBounds } from "@/lib/calendar";
 import { Badge, Card, PageHeader } from "@/components/ui";
 
 export const metadata = { title: "Übersicht" };
@@ -22,10 +23,9 @@ export default async function DashboardPage() {
   const orgId = ctx.orgId;
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = dayBounds(berlinDay(now)).start;
 
-  const [statusCounts, openInvoices, monthRevenue, upcoming, recent, customers] = await Promise.all([
+  const [statusCounts, openInvoices, monthRevenue, upcoming, recent, customers, newInquiries, openQuotes] = await Promise.all([
     db.order.groupBy({ by: ["status"], where: { organizationId: orgId }, _count: true }),
     db.invoice.findMany({ where: { organizationId: orgId, status: "ISSUED" }, select: { grossTotal: true, dueDate: true } }),
     db.invoice.aggregate({
@@ -40,6 +40,8 @@ export default async function DashboardPage() {
     }),
     db.order.findMany({ where: { organizationId: orgId }, include: { customer: true }, orderBy: { updatedAt: "desc" }, take: 6 }),
     db.customer.count({ where: { organizationId: orgId } }),
+    db.inquiry.count({ where: { organizationId: orgId, status: "NEW" } }),
+    db.quote.count({ where: { organizationId: orgId, status: "SENT" } }),
   ]);
   const count = (s: string) => statusCounts.find((c) => c.status === s)?._count ?? 0;
   const openSum = openInvoices.reduce((s, i) => s + toNumber(i.grossTotal), 0);
@@ -79,6 +81,21 @@ export default async function DashboardPage() {
             </li>
             <li>Auftrag erstellen, Fahrzeug fotografieren, Protokolle ausfüllen & abrechnen</li>
           </ol>
+        </div>
+      )}
+
+      {(newInquiries > 0 || overdue > 0) && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {newInquiries > 0 && (
+            <Link href="/inquiries" className="rounded-full bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-200">
+              📨 {newInquiries} neue {newInquiries === 1 ? "Anfrage" : "Anfragen"}
+            </Link>
+          )}
+          {overdue > 0 && (
+            <Link href="/invoices?status=OVERDUE" className="rounded-full bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200">
+              ⏰ {overdue} überfällige {overdue === 1 ? "Rechnung" : "Rechnungen"}
+            </Link>
+          )}
         </div>
       )}
 
@@ -123,6 +140,21 @@ export default async function DashboardPage() {
           )}
         </Card>
         <div className="space-y-6">
+          <Card title="Touren & Angebote">
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/today" className="btn-secondary">
+                Heute
+              </Link>
+              <Link href="/calendar" className="btn-secondary">
+                Wochenplan
+              </Link>
+            </div>
+            {openQuotes > 0 && (
+              <Link href="/quotes?status=SENT" className="mt-3 block text-sm text-brand-600">
+                {openQuotes} {openQuotes === 1 ? "Angebot wartet" : "Angebote warten"} auf Antwort →
+              </Link>
+            )}
+          </Card>
           <Card title="Umsatz diesen Monat">
             <p className="text-2xl font-bold">{formatMoney(monthRevenue._sum.netTotal)}</p>
             <p className="text-xs text-slate-500">netto, festgeschriebene Rechnungen</p>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { SKIPPABLE, type Step, type StepKey } from "@/lib/order-steps";
+import { SKIPPABLE, stepHref, type Step, type StepKey } from "@/lib/order-steps";
 import { SubmitButton } from "@/components/submit-button";
 import { createInvoiceFromOrder } from "@/app/(app)/invoices/actions";
 import { setStepSkipped } from "@/app/(app)/orders/actions";
@@ -31,24 +31,7 @@ type Props = {
   cancelled: boolean;
 };
 
-function target(key: StepKey, orderId: string, invoiceId: string | null) {
-  const base = `/orders/${orderId}`;
-  switch (key) {
-    case "prepare":
-      return `${base}/edit`;
-    case "pickupPhotos":
-      return `${base}/condition?stage=pickup`;
-    case "pickupProtocol":
-      return `${base}/protocol/pickup`;
-    case "deliveryPhotos":
-      return `${base}/condition?stage=delivery`;
-    case "deliveryProtocol":
-      return `${base}/protocol/delivery`;
-    case "invoice":
-    case "payment":
-      return invoiceId ? `/invoices/${invoiceId}` : `${base}/expenses`;
-  }
-}
+const target = stepHref;
 
 const TEXT: Record<StepKey, { title: string; text: string; button: string }> = {
   prepare: {

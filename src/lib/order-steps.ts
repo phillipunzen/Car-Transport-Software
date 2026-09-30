@@ -117,3 +117,23 @@ export function orderSteps(o: OrderStepInput): Step[] {
 export function currentStep(steps: Step[]) {
   return steps.find((s) => s.state === "current") ?? null;
 }
+
+/** Seite, auf der ein Schritt erledigt wird. */
+export function stepHref(key: StepKey, orderId: string, invoiceId: string | null) {
+  const base = `/orders/${orderId}`;
+  switch (key) {
+    case "prepare":
+      return `${base}/edit`;
+    case "pickupPhotos":
+      return `${base}/condition?stage=pickup`;
+    case "pickupProtocol":
+      return `${base}/protocol/pickup`;
+    case "deliveryPhotos":
+      return `${base}/condition?stage=delivery`;
+    case "deliveryProtocol":
+      return `${base}/protocol/delivery`;
+    case "invoice":
+    case "payment":
+      return invoiceId ? `/invoices/${invoiceId}` : `${base}/expenses`;
+  }
+}
