@@ -4,6 +4,7 @@ import { renderProtocolPdf } from "@/lib/pdf/protocol";
 import { renderInvoicePdf } from "@/lib/pdf/invoice";
 import { buildEInvoiceXml } from "@/lib/einvoice";
 import { renderDunningPdf } from "@/lib/pdf/dunning";
+import { renderQuotePdf } from "@/lib/pdf/quote";
 import { DUNNING_LEVEL } from "@/lib/dunning";
 
 /** Erzeugt ein Protokoll-PDF (oder null, wenn es das Protokoll nicht gibt). */
@@ -62,6 +63,16 @@ export async function dunningPdf(orgId: string, dunningId: string) {
   const { pdf } = await renderDunningPdf(dunning.invoice.organization, dunning.invoice, dunning);
   const label = (DUNNING_LEVEL[dunning.level]?.label ?? "Mahnung").replace(/\./g, "").replace(/\s+/g, "_");
   return { pdf, filename: `${label}_${dunning.invoice.number}.pdf` };
+}
+
+/** Angebot als PDF (oder null). */
+export async function quotePdf(orgId: string, quoteId: string) {
+  const quote = await db.quote.findFirst({
+    where: { id: quoteId, organizationId: orgId },
+    include: { items: { orderBy: { position: "asc" } }, customer: true, organization: true },
+  });
+  if (!quote) return null;
+  return { pdf: await renderQuotePdf(quote.organization, quote), filename: `Angebot_${quote.number}.pdf` };
 }
 
 /** Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen). */

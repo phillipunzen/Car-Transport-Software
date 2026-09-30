@@ -51,6 +51,9 @@ export function OrderForm({
   orderId,
   recognition,
   geo,
+  mode = "order",
+  quoteId,
+  hidden,
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
@@ -60,7 +63,14 @@ export function OrderForm({
   orderId?: string;
   recognition: "ai" | "ocr" | "off";
   geo: boolean;
+  /** "quote": vereinfachtes Formular für Angebote (Eckdaten + Preis) */
+  mode?: "order" | "quote";
+  quoteId?: string;
+  /** Zusätzliche versteckte Felder (z. B. Bezug zu einer Anfrage) */
+  hidden?: Record<string, string>;
 }) {
+  const isQuote = mode === "quote";
+  const recordId = orderId ?? quoteId;
   const initial = useMemo(() => ({ transportMode: "DRIVEN", pricingType: "FLAT", ...values }) as Record<string, string>, [values]);
   const [v, setV] = useState<Record<string, string>>(initial);
   const set = (k: string, val: string) => setV((s) => ({ ...s, [k]: val }));
@@ -68,7 +78,7 @@ export function OrderForm({
     setV((s) => ({ ...s, ...Object.fromEntries(Object.entries(patch).map(([k, val]) => [k, val ?? ""])) }));
 
   // ---- Lokaler Entwurf: Eingaben überleben Neuladen / Funkloch ----------------
-  const draftKey = `order-draft:${orderId ?? "new"}`;
+  const draftKey = `${mode}-draft:${recordId ?? "new"}`;
   const [restored, setRestored] = useState(false);
   const skipSave = useRef(true);
   useEffect(() => {
@@ -180,8 +190,8 @@ export function OrderForm({
       const next: Record<string, string> = { ...s, customerId: id };
       if (!c) return next;
       const fmt = (n: number | null) => (n === null ? "" : String(n).replace(".", ","));
-      if (c.pricePerKm !== null && (!s.pricePerKm || !orderId)) next.pricePerKm = fmt(c.pricePerKm);
-      if (!orderId || !s.returnType || s.returnType === "NONE") {
+      if (c.pricePerKm !== null && (!s.pricePerKm || !recordId)) next.pricePerKm = fmt(c.pricePerKm);
+      if (!recordId || !s.returnType || s.returnType === "NONE") {
         next.returnType = c.returnType;
         next.returnFlat = s.returnFlat || fmt(c.returnFlat);
         next.returnPerKm = s.returnPerKm || fmt(c.returnPerKm);
@@ -224,13 +234,14 @@ export function OrderForm({
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        {input(`${p}Name`, "Name / Firma", { className: "sm:col-span-2" })}
+        {!isQuote && input(`${p}Name`, "Name / Firma", { className: "sm:col-span-2" })}
         {input(`${p}Street`, "Straße & Hausnummer", { className: "sm:col-span-2", autoComplete: "off" })}
         {input(`${p}Zip`, "PLZ", { inputMode: "numeric" })}
         {input(`${p}City`, "Ort")}
-        {input(`${p}Contact`, "Ansprechpartner")}
-        {input(`${p}Phone`, "Telefon", { type: "tel" })}
-        {input(`${p}Date`, p === "pickup" ? "Abholtermin" : "Zustelltermin", { type: "datetime-local", className: "sm:col-span-2" })}
+        {!isQuote && input(`${p}Contact`, "Ansprechpartner")}
+        {!isQuote && input(`${p}Phone`, "Telefon", { type: "tel" })}
+        {(!isQuote || p === "pickup") &&
+          input(`${p}Date`, p === "pickup" ? (isQuote ? "Gewünschter Abholtermin" : "Abholtermin") : "Zustelltermin", { type: "datetime-local", className: "sm:col-span-2" })}
       </div>
     </fieldset>
   );
@@ -255,7 +266,10 @@ export function OrderForm({
         }
       }}
     >
-      {orderId && <input type="hidden" name="id" value={orderId} />}
+      {recordId && <input type="hidden" name="id" value={recordId} />}
+      {Object.entries(hidden ?? {}).map(([k, val]) => (
+        <input key={k} type="hidden" name={k} value={val} />
+      ))}
       <input type="hidden" name="vehicleId" value={v.vehicleId ?? ""} />
       <input type="hidden" name="durationMinutes" value={v.durationMinutes ?? ""} />
 
@@ -269,7 +283,7 @@ export function OrderForm({
       )}
 
       <section className="card card-body space-y-4">
-        <h2 className="section-title">Auftrag</h2>
+        <h2 className="section-title">{isQuote ? "Angebot für" : "Auftrag"}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label htmlFor="customerId">
@@ -284,8 +298,8 @@ export function OrderForm({
                   </option>
                 ))}
               </select>
-              {!orderId && (
-                <Link href="/customers/new?returnTo=order" className="btn-secondary mt-1 shrink-0">
+              {!recordId && (
+                <Link href={isQuote ? "/customers/new" : "/customers/new?returnTo=order"} className="btn-secondary mt-1 shrink-0">
                   + Neu
                 </Link>
               )}
@@ -301,8 +315,8 @@ export function OrderForm({
               ))}
             </select>
           </div>
-          {input("reference", "Referenz / Bestellnr. des Kunden")}
-          <div className="sm:col-span-2">
+          {!isQuote && input("reference", "Referenz / Bestellnr. des Kunden")}
+          <div className={isQuote ? "hidden" : "sm:col-span-2"}>
             <label htmlFor="assignedToId">Fahrer</label>
             <select id="assignedToId" name="assignedToId" value={v.assignedToId ?? ""} onChange={(e) => set("assignedToId", e.target.value)} className="input">
               <option value="">Nicht zugewiesen</option>
@@ -329,7 +343,7 @@ export function OrderForm({
           )}
         </div>
         {vehicles.length > 0 && <VehiclePicker vehicles={vehicles} customerId={v.customerId} onSelect={applyVehicle} />}
-        {recognition !== "off" && (
+        {recognition !== "off" && !isQuote && (
           <VehicleScan
             orderId={orderId}
             mode={recognition}
@@ -359,12 +373,12 @@ export function OrderForm({
         )}
         <div className="grid gap-4 sm:grid-cols-2">
           {input("licensePlate", "Kennzeichen", { mono: true })}
-          {input("vin", "Fahrgestellnummer (FIN)", { mono: true, maxLength: 17 })}
+          {!isQuote && input("vin", "Fahrgestellnummer (FIN)", { mono: true, maxLength: 17 })}
           {input("make", "Marke")}
           {input("model", "Modell")}
-          {input("color", "Farbe")}
-          {input("firstRegistration", "Erstzulassung")}
-          {input("vehicleType", "Fahrzeugtyp (z. B. PKW, Transporter, Wohnmobil)", { className: "sm:col-span-2" })}
+          {!isQuote && input("color", "Farbe")}
+          {!isQuote && input("firstRegistration", "Erstzulassung")}
+          {!isQuote && input("vehicleType", "Fahrzeugtyp (z. B. PKW, Transporter, Wohnmobil)", { className: "sm:col-span-2" })}
         </div>
       </section>
 
@@ -444,14 +458,18 @@ export function OrderForm({
             {returnTotal > 0 && ` (davon Rückreise ${returnTotal.toLocaleString("de-DE", { style: "currency", currency: "EUR" })})`}
           </p>
         )}
-        <div>
+        <div className={isQuote ? "hidden" : ""}>
           <label htmlFor="notes">Notizen / Hinweise für den Fahrer</label>
           <textarea id="notes" name="notes" rows={3} value={v.notes ?? ""} onChange={(e) => set("notes", e.target.value)} className="input" />
         </div>
       </section>
 
       <div className="sticky bottom-20 z-10 flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur lg:bottom-4">
-        {orderId ? (
+        {isQuote ? (
+          <SubmitButton name="intent" value="close" pendingText="Wird gespeichert…">
+            {quoteId ? "Eckdaten speichern" : "Angebot erstellen"}
+          </SubmitButton>
+        ) : orderId ? (
           <>
             <SubmitButton name="intent" value="stay" className="btn-secondary">
               Zwischenspeichern
@@ -470,7 +488,7 @@ export function OrderForm({
             </SubmitButton>
           </>
         )}
-        <Link href={orderId ? `/orders/${orderId}` : "/orders"} className="btn-ghost">
+        <Link href={isQuote ? (quoteId ? `/quotes/${quoteId}` : "/quotes") : orderId ? `/orders/${orderId}` : "/orders"} className="btn-ghost">
           Abbrechen
         </Link>
       </div>

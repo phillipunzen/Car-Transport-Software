@@ -55,3 +55,37 @@ export function discountInfo(gross: number, percent: Num, days: number | null | 
   const amount = Math.round(gross * p) / 100;
   return { percent: p, days, until: new Date(issueDate.getTime() + days * 86400000), amount, payable: Math.round((gross - amount) * 100) / 100 };
 }
+
+export type TransportInput = ReturnConfig & {
+  make?: string | null;
+  model?: string | null;
+  licensePlate?: string | null;
+  vin?: string | null;
+  pickupCity?: string | null;
+  deliveryCity?: string | null;
+  pricingType: string;
+  price?: Num;
+  pricePerKm?: Num;
+  distanceKm?: Num;
+};
+
+/** Positionen für eine Überführung: Transport (Pauschale oder km) + ggf. Rückreise. */
+export function transportItems(o: TransportInput, vatRate: number, extraLines: (string | null | undefined)[] = []) {
+  const vehicle = [o.make, o.model].filter(Boolean).join(" ");
+  const lines = [
+    `Fahrzeugüberführung${vehicle ? ` ${vehicle}` : ""}${o.licensePlate ? ` (${o.licensePlate})` : ""}`,
+    `${o.pickupCity ?? "?"} → ${o.deliveryCity ?? "?"}`,
+    o.vin ? `FIN: ${o.vin}` : null,
+    ...extraLines,
+  ].filter(Boolean);
+  const km = toNumber(o.distanceKm);
+  const kmText = km ? `\nStrecke: ${km.toLocaleString("de-DE", { maximumFractionDigits: 1, minimumFractionDigits: 1 })} km` : "";
+  const items = [
+    o.pricingType === "PER_KM"
+      ? { description: lines.join("\n"), quantity: km || 1, unit: "km", unitPrice: toNumber(o.pricePerKm), vatRate }
+      : { description: lines.join("\n") + kmText, quantity: 1, unit: "Pausch.", unitPrice: toNumber(o.price), vatRate },
+  ];
+  const ret = returnLine(o, o.distanceKm, vatRate);
+  if (ret) items.push(ret);
+  return items;
+}

@@ -66,11 +66,11 @@ export async function requireManager() {
 }
 
 /** Liefert die nächste fortlaufende Nummer (atomar) für Aufträge/Kunden. */
-export async function nextNumber(orgId: string, field: "nextOrderNumber" | "nextCustomerNumber") {
+export async function nextNumber(orgId: string, field: "nextOrderNumber" | "nextCustomerNumber" | "nextQuoteNumber") {
   const org = await db.organization.update({
     where: { id: orgId },
     data: { [field]: { increment: 1 } },
-    select: { nextOrderNumber: true, nextCustomerNumber: true },
+    select: { nextOrderNumber: true, nextCustomerNumber: true, nextQuoteNumber: true },
   });
   return org[field] - 1;
 }

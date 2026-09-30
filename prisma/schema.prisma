@@ -621,7 +621,12 @@ model Quote {
   model           String?
   distanceKm      Decimal?      @db.Decimal(10, 1)
   durationMinutes Int?
+  pricingType     PricingType   @default(FLAT)
+  price           Decimal?      @db.Decimal(12, 2)
+  pricePerKm      Decimal?      @db.Decimal(10, 2)
   returnType      String        @default("NONE")
+  returnFlat      Decimal?      @db.Decimal(10, 2)
+  returnPerKm     Decimal?      @db.Decimal(10, 2)
 
   orderId   String?  @unique
   createdAt DateTime @default(now())

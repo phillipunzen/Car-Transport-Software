@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
@@ -15,6 +16,7 @@ export default async function OrderLayout({ children, params }: { children: Reac
     where: { id, organizationId: ctx.orgId },
     include: {
       customer: true,
+      quote: { select: { id: true, number: true } },
       protocols: { select: { type: true, completedAt: true } },
       invoices: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, take: 1 },
       _count: { select: { photos: true, damages: true, expenses: true } },
@@ -59,6 +61,14 @@ export default async function OrderLayout({ children, params }: { children: Reac
             {customerName(order.customer)}
             {vehicle && ` · ${vehicle}`}
             {order.licensePlate && ` · ${order.licensePlate}`}
+            {order.quote && (
+              <>
+                {" · "}
+                <Link href={`/quotes/${order.quote.id}`} className="text-brand-600">
+                  Angebot {order.quote.number}
+                </Link>
+              </>
+            )}
           </>
         }
       />

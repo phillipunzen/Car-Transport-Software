@@ -69,60 +69,7 @@ export async function renderInvoicePdf(org: Organization, invoice: Full) {
   doc.font("Helvetica").fontSize(10);
   if (invoice.introText) doc.text(t(invoice.introText), { width: CONTENT_W, lineGap: 1.5 }).moveDown(0.8);
 
-  // Positionstabelle
-  const cols = { pos: MARGIN, desc: MARGIN + 30, qty: MARGIN + 290, price: MARGIN + 360, total: MARGIN + 420 };
-  const widths = { pos: 28, desc: 255, qty: 65, price: 58, total: CONTENT_W - 420 };
-  const tableHeader = () => {
-    const y = doc.y;
-    doc.rect(MARGIN, y - 4, CONTENT_W, 18).fill(COLORS.light);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.5);
-    doc.text("Pos.", cols.pos + 2, y, { width: widths.pos });
-    doc.text("Beschreibung", cols.desc, y, { width: widths.desc });
-    doc.text("Menge", cols.qty, y, { width: widths.qty, align: "right" });
-    doc.text("Einzelpreis", cols.price, y, { width: widths.price, align: "right" });
-    doc.text("Gesamt", cols.total, y, { width: widths.total, align: "right" });
-    doc.font("Helvetica").fontSize(9.5);
-    doc.y = y + 20;
-  };
-  tableHeader();
-  for (const item of invoice.items) {
-    const qty = toNumber(item.quantity);
-    const price = toNumber(item.unitPrice);
-    const desc = t(item.description);
-    const h = doc.heightOfString(desc, { width: widths.desc }) + 10;
-    if (doc.y + h > doc.page.height - doc.page.margins.bottom) {
-      doc.addPage();
-      doc.y = MARGIN;
-      tableHeader();
-    }
-    const y = doc.y;
-    doc.text(String(item.position), cols.pos + 2, y, { width: widths.pos });
-    doc.text(desc, cols.desc, y, { width: widths.desc, lineGap: 1 });
-    doc.text(t(`${qty.toLocaleString("de-DE", { maximumFractionDigits: 2 })} ${item.unit}`), cols.qty, y, { width: widths.qty, align: "right" });
-    doc.text(t(formatMoney(price)), cols.price, y, { width: widths.price, align: "right" });
-    doc.text(t(formatMoney(qty * price)), cols.total, y, { width: widths.total, align: "right" });
-    doc.y = y + h;
-    doc.moveTo(MARGIN, doc.y - 4).lineTo(PAGE_W - MARGIN, doc.y - 4).lineWidth(0.3).strokeColor(COLORS.line).stroke();
-  }
-
-  // Summen
-  const totals = computeTotals(
-    invoice.items.map((i) => ({ description: i.description, unit: i.unit, quantity: toNumber(i.quantity), unitPrice: toNumber(i.unitPrice), vatRate: toNumber(i.vatRate) })),
-    invoice.smallBusiness,
-  );
-  const sumRows: [string, number, boolean?][] = [["Summe netto", totals.net]];
-  for (const v of totals.vat) sumRows.push([`zzgl. ${v.rate.toLocaleString("de-DE")} % USt auf ${formatMoney(v.base)}`, v.amount]);
-  sumRows.push([isCredit ? "Gutschriftsbetrag" : "Rechnungsbetrag", totals.gross, true]);
-  ensureSpace(doc, sumRows.length * 16 + 20);
-  doc.moveDown(0.4);
-  for (const [label, value, bold] of sumRows) {
-    const y = doc.y;
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 9.5);
-    doc.text(t(label), MARGIN + 220, y, { width: 190, align: "right" });
-    doc.text(t(formatMoney(value)), cols.total - 20, y, { width: widths.total + 20, align: "right" });
-    doc.y = y + (bold ? 18 : 14);
-  }
-  doc.font("Helvetica").fontSize(9.5);
+  const totals = drawItems(doc, invoice.items, invoice.smallBusiness, isCredit ? "Gutschriftsbetrag" : "Rechnungsbetrag");
 
   if (invoice.smallBusiness) {
     doc.moveDown(0.5).text("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).", MARGIN, doc.y, { width: CONTENT_W });
@@ -210,4 +157,65 @@ ${prop("ConformanceLevel", "The conformance level of the embedded Factur-X data"
 </rdf:Seq></pdfaSchema:property>
 </rdf:li></rdf:Bag></pdfaExtension:schemas>
 </rdf:Description>`);
+}
+
+type ItemRow = Pick<InvoiceItem, "position" | "description" | "quantity" | "unit" | "unitPrice" | "vatRate">;
+
+/** Positionstabelle mit Summenblock (Rechnung, Angebot). Gibt die Summen zurück. */
+export function drawItems(doc: PDFKit.PDFDocument, items: ItemRow[], smallBusiness: boolean, totalLabel: string) {
+  // Positionstabelle
+  const cols = { pos: MARGIN, desc: MARGIN + 30, qty: MARGIN + 290, price: MARGIN + 360, total: MARGIN + 420 };
+  const widths = { pos: 28, desc: 255, qty: 65, price: 58, total: CONTENT_W - 420 };
+  const tableHeader = () => {
+    const y = doc.y;
+    doc.rect(MARGIN, y - 4, CONTENT_W, 18).fill(COLORS.light);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.5);
+    doc.text("Pos.", cols.pos + 2, y, { width: widths.pos });
+    doc.text("Beschreibung", cols.desc, y, { width: widths.desc });
+    doc.text("Menge", cols.qty, y, { width: widths.qty, align: "right" });
+    doc.text("Einzelpreis", cols.price, y, { width: widths.price, align: "right" });
+    doc.text("Gesamt", cols.total, y, { width: widths.total, align: "right" });
+    doc.font("Helvetica").fontSize(9.5);
+    doc.y = y + 20;
+  };
+  tableHeader();
+  for (const item of items) {
+    const qty = toNumber(item.quantity);
+    const price = toNumber(item.unitPrice);
+    const desc = t(item.description);
+    const h = doc.heightOfString(desc, { width: widths.desc }) + 10;
+    if (doc.y + h > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      doc.y = MARGIN;
+      tableHeader();
+    }
+    const y = doc.y;
+    doc.text(String(item.position), cols.pos + 2, y, { width: widths.pos });
+    doc.text(desc, cols.desc, y, { width: widths.desc, lineGap: 1 });
+    doc.text(t(`${qty.toLocaleString("de-DE", { maximumFractionDigits: 2 })} ${item.unit}`), cols.qty, y, { width: widths.qty, align: "right" });
+    doc.text(t(formatMoney(price)), cols.price, y, { width: widths.price, align: "right" });
+    doc.text(t(formatMoney(qty * price)), cols.total, y, { width: widths.total, align: "right" });
+    doc.y = y + h;
+    doc.moveTo(MARGIN, doc.y - 4).lineTo(PAGE_W - MARGIN, doc.y - 4).lineWidth(0.3).strokeColor(COLORS.line).stroke();
+  }
+
+  // Summen
+  const totals = computeTotals(
+    items.map((i) => ({ description: i.description, unit: i.unit, quantity: toNumber(i.quantity), unitPrice: toNumber(i.unitPrice), vatRate: toNumber(i.vatRate) })),
+    smallBusiness,
+  );
+  const sumRows: [string, number, boolean?][] = [["Summe netto", totals.net]];
+  for (const v of totals.vat) sumRows.push([`zzgl. ${v.rate.toLocaleString("de-DE")} % USt auf ${formatMoney(v.base)}`, v.amount]);
+  sumRows.push([totalLabel, totals.gross, true]);
+  ensureSpace(doc, sumRows.length * 16 + 20);
+  doc.moveDown(0.4);
+  for (const [label, value, bold] of sumRows) {
+    const y = doc.y;
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 9.5);
+    doc.text(t(label), MARGIN + 220, y, { width: 190, align: "right" });
+    doc.text(t(formatMoney(value)), cols.total - 20, y, { width: widths.total + 20, align: "right" });
+    doc.y = y + (bold ? 18 : 14);
+  }
+  doc.font("Helvetica").fontSize(9.5);
+  return totals;
 }

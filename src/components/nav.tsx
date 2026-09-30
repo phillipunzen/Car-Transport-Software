@@ -9,6 +9,7 @@ const ICONS: Record<string, React.ReactNode> = {
   vehicles: <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zm2.2-.5h9.6l-1-3.2a.5.5 0 0 0-.5-.3H8.7a.5.5 0 0 0-.5.3zM7.5 14a1 1 0 1 0 0-2 1 1 0 0 0 0 2m9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2" />,
   customers: <path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6m0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13m8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5" />,
   documents: <path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm4 6v2h8v-2zm0 4v2h5v-2z" />,
+  quotes: <path d="M6 2h9l5 5v6.2l-2 2V8h-5V4H6v16h6v2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m2 8h8v2H8zm0 4h5v2H8zm12.7 1.3 1 1a1 1 0 0 1 0 1.4L16.4 23H14v-2.4l5.3-5.3a1 1 0 0 1 1.4 0" />,
   invoices: <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h5v-2z" />,
   settings: <path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.9a7 7 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7" />,
 };
@@ -16,6 +17,7 @@ const ICONS: Record<string, React.ReactNode> = {
 export const NAV = [
   { href: "/dashboard", label: "Übersicht", icon: "dashboard" },
   { href: "/orders", label: "Aufträge", icon: "orders" },
+  { href: "/quotes", label: "Angebote", icon: "quotes" },
   { href: "/vehicles", label: "Fahrzeuge", icon: "vehicles" },
   { href: "/customers", label: "Kunden", icon: "customers" },
   { href: "/invoices", label: "Rechnungen", icon: "invoices" },
@@ -24,7 +26,7 @@ export const NAV = [
 ];
 
 /** Einstellungen liegen auf dem Smartphone im Kopfbereich, damit die Leiste nicht überläuft. */
-const MOBILE_NAV = NAV.filter((n) => n.href !== "/settings");
+const MOBILE_NAV = NAV.filter((n) => n.href !== "/settings" && n.href !== "/quotes");
 
 export function SettingsIconLink() {
   const path = usePathname();

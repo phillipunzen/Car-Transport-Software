@@ -34,7 +34,16 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         title={customerName(customer)}
         subtitle={customerNo(customer.number)}
         back={{ href: "/customers", label: "Kunden" }}
-        actions={<Link href={`/orders/new?customerId=${customer.id}`} className="btn-primary">+ Neuer Auftrag</Link>}
+        actions={
+          <div className="flex gap-2">
+            <Link href={`/quotes/new?customerId=${customer.id}`} className="btn-secondary">
+              + Angebot
+            </Link>
+            <Link href={`/orders/new?customerId=${customer.id}`} className="btn-primary">
+              + Neuer Auftrag
+            </Link>
+          </div>
+        }
       />
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">

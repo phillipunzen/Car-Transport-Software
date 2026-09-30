@@ -182,11 +182,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             {invoice.paidAt && <p className="text-sm text-emerald-700">Bezahlt am {formatDate(invoice.paidAt)}</p>}
             <div className="mt-4 space-y-2">
               {invoice.status === "ISSUED" && (
-                <form action={setPaid} className="flex gap-2">
+                <form action={setPaid} className="flex flex-wrap gap-2">
                   <input type="hidden" name="id" value={invoice.id} />
                   <input type="hidden" name="paid" value="1" />
-                  <input type="date" name="paidAt" defaultValue={toDateTimeLocal(new Date()).slice(0, 10)} className="input mt-0" />
-                  <SubmitButton className="btn-primary shrink-0">Als bezahlt markieren</SubmitButton>
+                  <input type="date" name="paidAt" defaultValue={toDateTimeLocal(new Date()).slice(0, 10)} className="input mt-0 min-w-0 flex-1" />
+                  <SubmitButton className="btn-primary grow">Als bezahlt markieren</SubmitButton>
                 </form>
               )}
               {invoice.status === "PAID" && toNumber(invoice.grossTotal) >= 0 && (

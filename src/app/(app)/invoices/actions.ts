@@ -6,12 +6,12 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireCtx, type Ctx } from "@/lib/org";
-import { addressLines, decimal, formatDate, formatNumber, fromDateTimeLocal, orderNo, str, toNumber } from "@/lib/format";
+import { addressLines, decimal, formatDate, fromDateTimeLocal, orderNo, str, toNumber } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { computeTotals, type ItemInput } from "@/lib/invoice";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../orders/actions";
-import { effectiveConditions, returnLine } from "@/lib/pricing";
+import { effectiveConditions, transportItems } from "@/lib/pricing";
 import { DUNNING_LEVEL, MAX_DUNNING_LEVEL, dunningFee } from "@/lib/dunning";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -46,29 +46,28 @@ export async function createInvoiceFromOrder(formData: FormData) {
   const ctx = await requireCtx();
   const order = await db.order.findFirst({
     where: { id: String(formData.get("orderId")), organizationId: ctx.orgId },
-    include: { expenses: { where: { rebillable: true }, orderBy: { date: "asc" } }, protocols: true },
+    include: {
+      expenses: { where: { rebillable: true }, orderBy: { date: "asc" } },
+      protocols: true,
+      quote: { include: { items: { orderBy: { position: "asc" } } } },
+    },
   });
   if (!order) throw new Error("Auftrag nicht gefunden");
   const existing = await db.invoice.findFirst({ where: { orderId: order.id, status: { not: "CANCELLED" } } });
   if (existing) redirect(`/invoices/${existing.id}`);
 
   const vatRate = ctx.org.smallBusiness ? 0 : toNumber(ctx.org.defaultVatRate);
-  const vehicle = [order.make, order.model].filter(Boolean).join(" ");
-  const lines = [
-    `Fahrzeugüberführung${vehicle ? ` ${vehicle}` : ""}${order.licensePlate ? ` (${order.licensePlate})` : ""}`,
-    `${order.pickupCity ?? "?"} → ${order.deliveryCity ?? "?"}`,
-    order.vin ? `FIN: ${order.vin}` : null,
-    `Auftrag ${orderNo(order.number)}${order.reference ? ` · Ihre Referenz: ${order.reference}` : ""}`,
-  ].filter(Boolean);
-  const km = toNumber(order.distanceKm);
-  const items: ItemInput[] = [];
-  if (order.pricingType === "PER_KM") {
-    items.push({ description: lines.join("\n"), quantity: km || 1, unit: "km", unitPrice: toNumber(order.pricePerKm), vatRate });
-  } else {
-    items.push({ description: lines.join("\n") + (km ? `\nStrecke: ${formatNumber(km, 1)} km` : ""), quantity: 1, unit: "Pausch.", unitPrice: toNumber(order.price), vatRate });
-  }
-  const ret = returnLine(order, order.distanceKm, vatRate);
-  if (ret) items.push(ret);
+  const refLine = `Auftrag ${orderNo(order.number)}${order.reference ? ` · Ihre Referenz: ${order.reference}` : ""}`;
+  // Aus einem Angebot entstanden: die (ggf. angepassten) Angebotspositionen übernehmen
+  const items: ItemInput[] = order.quote?.items.length
+    ? order.quote.items.map((i, idx) => ({
+        description: idx === 0 ? `${i.description}\n${refLine}` : i.description,
+        quantity: toNumber(i.quantity),
+        unit: i.unit,
+        unitPrice: toNumber(i.unitPrice),
+        vatRate: ctx.org.smallBusiness ? 0 : toNumber(i.vatRate),
+      }))
+    : transportItems(order, vatRate, [refLine]);
   for (const e of order.expenses) {
     const gross = toNumber(e.amountGross);
     // Auslagen werden netto weiterberechnet (bei Kleinunternehmern brutto)

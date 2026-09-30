@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE `Quote` ADD COLUMN `price` DECIMAL(12, 2) NULL,
+    ADD COLUMN `pricePerKm` DECIMAL(10, 2) NULL,
+    ADD COLUMN `pricingType` ENUM('FLAT', 'PER_KM') NOT NULL DEFAULT 'FLAT',
+    ADD COLUMN `returnFlat` DECIMAL(10, 2) NULL,
+    ADD COLUMN `returnPerKm` DECIMAL(10, 2) NULL;
+

@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { computeTotals, lineTotal } from "@/lib/invoice";
 import { saveInvoice } from "@/app/(app)/invoices/actions";
+import type { FormState } from "@/components/action-form";
 
 type Row = { description: string; quantity: string; unit: string; unitPrice: string; vatRate: string };
 
@@ -15,15 +16,32 @@ const parse = (s: string) => {
 };
 const money = (n: number) => n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
+/** Positionseditor für Rechnungsentwürfe und Angebote. */
 export function InvoiceEditor({
   invoice,
   items,
   defaultVat,
+  kind = "invoice",
+  action = saveInvoice,
 }: {
-  invoice: { id: string; recipient: string; serviceDate: string; introText: string; footerText: string; smallBusiness: boolean; discountPercent: string; discountDays: string; buyerReference: string };
+  invoice: {
+    id: string;
+    recipient: string;
+    introText: string;
+    footerText: string;
+    smallBusiness: boolean;
+    serviceDate?: string;
+    validUntil?: string;
+    discountPercent?: string;
+    discountDays?: string;
+    buyerReference?: string;
+  };
   items: Row[];
   defaultVat: number;
+  kind?: "invoice" | "quote";
+  action?: (s: FormState, f: FormData) => Promise<FormState>;
 }) {
+  const isQuote = kind === "quote";
   const [rows, setRows] = useState<Row[]>(items);
   const [small, setSmall] = useState(invoice.smallBusiness);
   const numeric = rows.map((r) => ({ description: r.description, unit: r.unit, quantity: parse(r.quantity), unitPrice: parse(r.unitPrice), vatRate: parse(r.vatRate) }));
@@ -39,25 +57,32 @@ export function InvoiceEditor({
     });
 
   return (
-    <ActionForm action={saveInvoice} className="space-y-6">
+    <ActionForm action={action} className="space-y-6">
       <input type="hidden" name="id" value={invoice.id} />
       <input type="hidden" name="items" value={JSON.stringify(numeric)} />
 
       <section className="card card-body grid gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="recipient">Rechnungsempfänger</label>
+          <label htmlFor="recipient">{isQuote ? "Angebotsempfänger" : "Rechnungsempfänger"}</label>
           <textarea id="recipient" name="recipient" rows={5} defaultValue={invoice.recipient} className="input font-mono text-sm" />
         </div>
         <div className="space-y-4">
-          <div>
-            <label htmlFor="serviceDate">Leistungsdatum</label>
-            <input id="serviceDate" name="serviceDate" type="datetime-local" defaultValue={invoice.serviceDate} className="input" />
-          </div>
+          {isQuote ? (
+            <div>
+              <label htmlFor="validUntil">Gültig bis</label>
+              <input id="validUntil" name="validUntil" type="date" defaultValue={invoice.validUntil} className="input" />
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="serviceDate">Leistungsdatum</label>
+              <input id="serviceDate" name="serviceDate" type="datetime-local" defaultValue={invoice.serviceDate} className="input" />
+            </div>
+          )}
           <label className="flex items-center gap-2 font-normal">
             <input type="checkbox" name="smallBusiness" checked={small} onChange={(e) => setSmall(e.target.checked)} className="h-4 w-4 accent-brand-600" />
             Kleinunternehmer (§ 19 UStG, keine Umsatzsteuer)
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={isQuote ? "hidden" : "grid grid-cols-2 gap-3"}>
             <div>
               <label htmlFor="discountPercent">Skonto %</label>
               <input id="discountPercent" name="discountPercent" inputMode="decimal" defaultValue={invoice.discountPercent} placeholder="z. B. 2" className="input" />
@@ -67,11 +92,11 @@ export function InvoiceEditor({
               <input id="discountDays" name="discountDays" type="number" min={1} defaultValue={invoice.discountDays} className="input" />
             </div>
           </div>
-          <div>
+          <div className={isQuote ? "hidden" : ""}>
             <label htmlFor="buyerReference">Leitweg-ID / Käuferreferenz (E-Rechnung)</label>
             <input id="buyerReference" name="buyerReference" defaultValue={invoice.buyerReference} placeholder="nur bei öffentlichen Auftraggebern Pflicht" className="input" />
           </div>
-          <p className="text-xs text-slate-500">Rechnungsnummer und Rechnungsdatum werden beim Festschreiben automatisch vergeben.</p>
+          {!isQuote && <p className="text-xs text-slate-500">Rechnungsnummer und Rechnungsdatum werden beim Festschreiben automatisch vergeben.</p>}
         </div>
         <div className="md:col-span-2">
           <label htmlFor="introText">Einleitungstext</label>
@@ -161,9 +186,10 @@ export function InvoiceEditor({
       </section>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <SubmitButton name="intent" value="save" className="btn-secondary">
-          Entwurf speichern
+        <SubmitButton name="intent" value="save" className={isQuote ? undefined : "btn-secondary"}>
+          {isQuote ? "Angebot speichern" : "Entwurf speichern"}
         </SubmitButton>
+        {!isQuote && (
         <SubmitButton
           name="intent"
           value="issue"
@@ -172,6 +198,7 @@ export function InvoiceEditor({
         >
           Speichern & festschreiben
         </SubmitButton>
+        )}
       </div>
     </ActionForm>
   );

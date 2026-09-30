@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { mailEnabled, sendMailWith } from "@/lib/mail";
-import { dunningPdf, invoicePdf, invoiceXml, protocolPdf } from "@/lib/pdf/load";
+import { dunningPdf, invoicePdf, invoiceXml, protocolPdf, quotePdf } from "@/lib/pdf/load";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "./actions";
 
@@ -63,6 +63,11 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
       result = dunningId ? await dunningPdf(ctx.orgId, dunningId) : null;
       if (!result) return { error: "Mahnung nicht gefunden." };
       names.push(result.filename.replace(/_/g, " ").replace(/\.pdf$/, ""));
+    } else if (doc === "QUOTE") {
+      const quoteId = String(formData.get("quoteId") ?? "");
+      result = quoteId ? await quotePdf(ctx.orgId, quoteId) : null;
+      if (!result) return { error: "Angebot nicht gefunden." };
+      names.push(result.filename.replace(/_/g, " ").replace(/\.pdf$/, ""));
     }
     if (result) attachments.push({ filename: result.filename, content: result.pdf, contentType: result.contentType ?? "application/pdf" });
   }
@@ -81,6 +86,13 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
   } catch (e) {
     console.error("E-Mail-Versand fehlgeschlagen", e);
     return { error: "Die E-Mail konnte nicht gesendet werden. Bitte SMTP-Einstellungen prüfen." };
+  }
+
+  // Angebot versendet: Status automatisch auf "Versendet"
+  const quoteId = String(formData.get("quoteId") ?? "");
+  if (docs.includes("QUOTE") && quoteId) {
+    await db.quote.updateMany({ where: { id: quoteId, organizationId: ctx.orgId, status: "DRAFT" }, data: { status: "SENT" } });
+    revalidatePath(`/quotes/${quoteId}`);
   }
 
   const logOrderId = orderId ?? (invoiceId ? (await db.invoice.findUnique({ where: { id: invoiceId } }))?.orderId : null);
