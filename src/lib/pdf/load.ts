@@ -3,6 +3,8 @@ import { orderNo } from "@/lib/format";
 import { renderProtocolPdf } from "@/lib/pdf/protocol";
 import { renderInvoicePdf } from "@/lib/pdf/invoice";
 import { buildEInvoiceXml } from "@/lib/einvoice";
+import { renderDunningPdf } from "@/lib/pdf/dunning";
+import { DUNNING_LEVEL } from "@/lib/dunning";
 
 /** Erzeugt ein Protokoll-PDF (oder null, wenn es das Protokoll nicht gibt). */
 export async function protocolPdf(orgId: string, orderId: string, type: "PICKUP" | "DELIVERY") {
@@ -48,6 +50,18 @@ export async function invoiceXml(orgId: string, invoiceId: string) {
   });
   if (!invoice?.number) return null;
   return { xml: buildEInvoiceXml(invoice.organization, invoice), filename: `XRechnung_${invoice.number}.xml` };
+}
+
+/** Mahnschreiben als PDF (oder null). */
+export async function dunningPdf(orgId: string, dunningId: string) {
+  const dunning = await db.dunning.findFirst({
+    where: { id: dunningId, invoice: { organizationId: orgId } },
+    include: { invoice: { include: { customer: true, dunnings: true, organization: true } } },
+  });
+  if (!dunning) return null;
+  const { pdf } = await renderDunningPdf(dunning.invoice.organization, dunning.invoice, dunning);
+  const label = (DUNNING_LEVEL[dunning.level]?.label ?? "Mahnung").replace(/\./g, "").replace(/\s+/g, "_");
+  return { pdf, filename: `${label}_${dunning.invoice.number}.pdf` };
 }
 
 /** Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen). */

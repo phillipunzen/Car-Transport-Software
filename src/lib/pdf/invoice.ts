@@ -9,7 +9,7 @@ import { COLORS, CONTENT_W, MARGIN, PAGE_W, createDoc, drawFooters, drawLogo, en
 type Full = Invoice & { items: InvoiceItem[]; customer: Customer; order: Order | null };
 
 /** EPC-QR-Code ("GiroCode") – lässt sich mit jeder Banking-App scannen. */
-async function giroCode(org: Organization, amount: number, reference: string) {
+export async function giroCode(org: Organization, amount: number, reference: string) {
   if (!org.iban || amount <= 0 || amount > 999999999.99) return null;
   const payload = [
     "BCD",

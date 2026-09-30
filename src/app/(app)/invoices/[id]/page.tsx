@@ -11,14 +11,20 @@ import { InvoiceEditor } from "@/components/invoice-editor";
 import { SubmitButton } from "@/components/submit-button";
 import { EmailDocuments } from "@/components/email-documents";
 import { emailDocumentsProps } from "@/lib/email-docs";
-import { cancelInvoice, deleteDraft, setPaid } from "../actions";
+import { cancelInvoice, createDunning, deleteDraft, deleteDunning, setPaid } from "../actions";
+import { DUNNING_LEVEL, MAX_DUNNING_LEVEL, dunningFee } from "@/lib/dunning";
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const invoice = await db.invoice.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { customer: true, order: { include: { protocols: true } }, items: { orderBy: { position: "asc" } } },
+    include: {
+      customer: true,
+      order: { include: { protocols: true } },
+      items: { orderBy: { position: "asc" } },
+      dunnings: { orderBy: { level: "asc" } },
+    },
   });
   if (!invoice) notFound();
 
@@ -110,6 +116,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   }
 
   const eIssues = einvoiceIssues(ctx.org, invoice);
+  const now = new Date();
+  const isCredit = Boolean(invoice.correctsNumber) || toNumber(invoice.grossTotal) < 0;
+  const lastDunning = invoice.dunnings.at(-1) ?? null;
+  const nextLevel = (lastDunning?.level ?? 0) + 1;
+  const overdue = invoice.status === "ISSUED" && !isCredit && invoice.dueDate && invoice.dueDate < now;
+  const currentDue = lastDunning?.dueDate ?? invoice.dueDate;
+  const feesTotal = invoice.dunnings.reduce((s, d) => s + toNumber(d.fee), 0);
   const totals = computeTotals(
     invoice.items.map((i) => ({ description: i.description, unit: i.unit, quantity: toNumber(i.quantity), unitPrice: toNumber(i.unitPrice), vatRate: toNumber(i.vatRate) })),
     invoice.smallBusiness,
@@ -211,6 +224,75 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </div>
             )}
           </Card>
+          {invoice.status === "ISSUED" && !isCredit && (overdue || invoice.dunnings.length > 0) && (
+            <Card title="Mahnwesen">
+              {invoice.dunnings.length === 0 ? (
+                <p className="text-sm text-red-700">Seit {formatDate(invoice.dueDate)} überfällig.</p>
+              ) : (
+                <ul className="-my-1 space-y-2">
+                  {invoice.dunnings.map((d) => (
+                    <li key={d.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{DUNNING_LEVEL[d.level]?.label}</span>
+                        <a href={`/api/dunnings/${d.id}/pdf`} target="_blank" rel="noreferrer" className="text-brand-600">
+                          PDF
+                        </a>
+                      </div>
+                      <p className="text-slate-500">
+                        vom {formatDate(d.createdAt)} · Frist {formatDate(d.dueDate)}
+                        {toNumber(d.fee) > 0 && ` · Gebühr ${formatMoney(d.fee)}`}
+                      </p>
+                      {d.id === lastDunning?.id && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <EmailDocuments
+                            label="✉️ Senden"
+                            className="btn-secondary py-1.5"
+                            {...emailDocumentsProps({
+                              org: ctx.org,
+                              order: invoice.order,
+                              customer: invoice.customer,
+                              protocols: [],
+                              invoice,
+                              focus: "dunning",
+                              dunning: d,
+                              dunningTotal: toNumber(invoice.grossTotal) + feesTotal,
+                            })}
+                          />
+                          <form action={deleteDunning}>
+                            <input type="hidden" name="dunningId" value={d.id} />
+                            <SubmitButton className="btn-secondary py-1.5 text-red-600" confirm="Diese Mahnstufe zurücknehmen?">
+                              Zurücknehmen
+                            </SubmitButton>
+                          </form>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {nextLevel <= MAX_DUNNING_LEVEL ? (
+                <form action={createDunning} className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                  <input type="hidden" name="id" value={invoice.id} />
+                  {currentDue && currentDue > now && (
+                    <p className="text-xs text-slate-500">Die aktuelle Frist läuft noch bis {formatDate(currentDue)}.</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="fee">Gebühr (€)</label>
+                      <input id="fee" name="fee" inputMode="decimal" defaultValue={dunningFee(ctx.org, nextLevel).toFixed(2).replace(".", ",")} className="input" />
+                    </div>
+                    <div>
+                      <label htmlFor="days">Neue Frist (Tage)</label>
+                      <input id="days" name="days" type="number" min={1} defaultValue={ctx.org.dunningDays} className="input" />
+                    </div>
+                  </div>
+                  <SubmitButton className="btn-primary w-full">{DUNNING_LEVEL[nextLevel].label} erstellen</SubmitButton>
+                </form>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">Alle Mahnstufen ausgeschöpft – als Nächstes Inkasso oder gerichtliches Mahnverfahren.</p>
+              )}
+            </Card>
+          )}
           <Card title="E-Rechnung">
             <p className="text-sm text-slate-600">
               Das PDF enthält die E-Rechnung bereits eingebettet (ZUGFeRD/Factur-X, Profil XRechnung). Für Behörden oder Portale gibt es die reine XML-Datei.

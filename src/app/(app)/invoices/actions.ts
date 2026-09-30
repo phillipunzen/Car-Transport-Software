@@ -12,6 +12,7 @@ import { computeTotals, type ItemInput } from "@/lib/invoice";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../orders/actions";
 import { effectiveConditions, returnLine } from "@/lib/pricing";
+import { DUNNING_LEVEL, MAX_DUNNING_LEVEL, dunningFee } from "@/lib/dunning";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -270,4 +271,37 @@ export async function deleteDraft(formData: FormData) {
   if (invoice.status !== "DRAFT") throw new Error("Nur Entwürfe können gelöscht werden.");
   await db.invoice.delete({ where: { id: invoice.id } });
   redirect(invoice.orderId ? `/orders/${invoice.orderId}` : "/invoices");
+}
+
+/** Nächste Mahnstufe anlegen (Zahlungserinnerung → 1. Mahnung → 2. Mahnung). */
+export async function createDunning(formData: FormData) {
+  const ctx = await requireCtx();
+  const invoice = await db.invoice.findFirst({
+    where: { id: String(formData.get("id")), organizationId: ctx.orgId },
+    include: { dunnings: true },
+  });
+  if (!invoice || invoice.status !== "ISSUED" || invoice.correctsNumber) throw new Error("Nur offene Rechnungen können gemahnt werden.");
+  const level = Math.max(0, ...invoice.dunnings.map((d) => d.level)) + 1;
+  if (level > MAX_DUNNING_LEVEL) throw new Error("Die letzte Mahnstufe ist bereits erreicht.");
+  const fee = decimal(formData.get("fee")) ?? dunningFee(ctx.org, level);
+  const days = Math.max(1, Math.round(decimal(formData.get("days")) ?? ctx.org.dunningDays));
+  const dunning = await db.dunning.create({
+    data: { invoiceId: invoice.id, level, fee: Math.max(0, fee), dueDate: new Date(Date.now() + days * 86400000) },
+  });
+  if (invoice.orderId) await logEvent(invoice.orderId, ctx, `${DUNNING_LEVEL[level].label} zu Rechnung ${invoice.number} erstellt`);
+  revalidatePath(`/invoices/${invoice.id}`);
+  redirect(`/invoices/${invoice.id}?dunning=${dunning.id}`);
+}
+
+/** Zuletzt erstellte Mahnstufe zurücknehmen (z. B. versehentlich angelegt). */
+export async function deleteDunning(formData: FormData) {
+  const ctx = await requireCtx();
+  const dunning = await db.dunning.findFirst({
+    where: { id: String(formData.get("dunningId")), invoice: { organizationId: ctx.orgId } },
+    include: { invoice: { include: { dunnings: true } } },
+  });
+  if (!dunning) return;
+  if (dunning.invoice.dunnings.some((d) => d.level > dunning.level)) throw new Error("Nur die letzte Mahnstufe kann zurückgenommen werden.");
+  await db.dunning.delete({ where: { id: dunning.id } });
+  revalidatePath(`/invoices/${dunning.invoiceId}`);
 }

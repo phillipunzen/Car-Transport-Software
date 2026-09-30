@@ -25,6 +25,7 @@ export function EmailDocuments({
   message,
   docs,
   mailEnabled,
+  refs,
 }: {
   label?: string;
   className?: string;
@@ -35,6 +36,8 @@ export function EmailDocuments({
   message: string;
   docs: EmailDoc[];
   mailEnabled: boolean;
+  /** Weitere Bezüge (z. B. quoteId, dunningId) als versteckte Felder */
+  refs?: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
@@ -74,6 +77,9 @@ export function EmailDocuments({
               <ActionForm action={sendDocumentsEmail} onSuccess={() => setSent(true)}>
                 {orderId && <input type="hidden" name="orderId" value={orderId} />}
                 {invoiceId && <input type="hidden" name="invoiceId" value={invoiceId} />}
+                {Object.entries(refs ?? {}).map(([k, v]) => (
+                  <input key={k} type="hidden" name={k} value={v} />
+                ))}
                 <div>
                   <label htmlFor="mail-to">An</label>
                   <input id="mail-to" name="to" type="text" inputMode="email" defaultValue={to} required className="input" placeholder="kunde@example.de" />

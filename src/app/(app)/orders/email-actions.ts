@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { mailEnabled, sendMailWith } from "@/lib/mail";
-import { invoicePdf, invoiceXml, protocolPdf } from "@/lib/pdf/load";
+import { dunningPdf, invoicePdf, invoiceXml, protocolPdf } from "@/lib/pdf/load";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "./actions";
 
@@ -58,6 +58,11 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
       if (!x) return { error: "Die E-Rechnung gibt es erst nach dem Festschreiben." };
       result = { pdf: Buffer.from(x.xml, "utf8"), filename: x.filename, contentType: "application/xml" };
       names.push("E-Rechnung (XML)");
+    } else if (doc === "DUNNING") {
+      const dunningId = String(formData.get("dunningId") ?? "");
+      result = dunningId ? await dunningPdf(ctx.orgId, dunningId) : null;
+      if (!result) return { error: "Mahnung nicht gefunden." };
+      names.push(result.filename.replace(/_/g, " ").replace(/\.pdf$/, ""));
     }
     if (result) attachments.push({ filename: result.filename, content: result.pdf, contentType: result.contentType ?? "application/pdf" });
   }

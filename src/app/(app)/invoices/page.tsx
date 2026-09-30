@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { customerName, formatDate, formatMoney, toNumber } from "@/lib/format";
 import { INVOICE_STATUS } from "@/lib/labels";
+import { DUNNING_LEVEL } from "@/lib/dunning";
 import { customerOptions } from "@/lib/queries";
 import { Badge, Empty, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
@@ -15,10 +16,15 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const ctx = await requireCtx();
   const { status } = await searchParams;
   const valid = status && INVOICE_STATUS[status] ? (status as InvoiceStatus) : undefined;
+  const overdueOnly = status === "OVERDUE";
   const [invoices, customers] = await Promise.all([
     db.invoice.findMany({
-      where: { organizationId: ctx.orgId, ...(valid ? { status: valid } : {}) },
-      include: { customer: true },
+      where: {
+        organizationId: ctx.orgId,
+        ...(valid ? { status: valid } : {}),
+        ...(overdueOnly ? { status: "ISSUED" as const, dueDate: { lt: new Date() }, correctsNumber: null } : {}),
+      },
+      include: { customer: true, dunnings: { select: { level: true } } },
       orderBy: [{ issueDate: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }],
       take: 300,
     }),
@@ -33,11 +39,11 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
       <PageHeader title="Rechnungen" subtitle={`${open.length} offen · ${formatMoney(openSum)}`} />
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-1">
-          {[["", "Alle"], ...Object.entries(INVOICE_STATUS).map(([k, v]) => [k, v.label])].map(([k, label]) => (
+          {[["", "Alle"], ...Object.entries(INVOICE_STATUS).map(([k, v]) => [k, v.label]), ["OVERDUE", "Überfällig"]].map(([k, label]) => (
             <Link
               key={k}
               href={k ? `/invoices?status=${k}` : "/invoices"}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium ${(valid ?? "") === k ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium ${(overdueOnly ? "OVERDUE" : (valid ?? "")) === k ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
             >
               {label}
             </Link>
@@ -75,6 +81,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             <tbody>
               {invoices.map((i) => {
                 const overdue = i.status === "ISSUED" && i.dueDate && i.dueDate < now;
+                const level = Math.max(0, ...i.dunnings.map((d) => d.level));
                 return (
                   <tr key={i.id} className="hover:bg-slate-50">
                     <td>
@@ -88,6 +95,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                     <td className="text-right font-medium">{formatMoney(i.grossTotal)}</td>
                     <td>
                       <Badge className={overdue ? "bg-red-100 text-red-700" : INVOICE_STATUS[i.status].color}>{overdue ? "Überfällig" : INVOICE_STATUS[i.status].label}</Badge>
+                      {level > 0 && i.status === "ISSUED" && <span className="ml-1 text-xs text-red-600">{DUNNING_LEVEL[level]?.label}</span>}
                     </td>
                   </tr>
                 );

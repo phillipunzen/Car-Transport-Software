@@ -1,4 +1,5 @@
-import type { Customer, Invoice, Order, Organization, Protocol } from "@prisma/client";
+import type { Customer, Dunning, Invoice, Order, Organization, Protocol } from "@prisma/client";
+import { DUNNING_LEVEL } from "@/lib/dunning";
 import { formatMoney, formatDate, orderNo } from "@/lib/format";
 import { mailEnabled } from "@/lib/mail";
 import type { EmailDoc } from "@/components/email-documents";
@@ -14,13 +15,17 @@ export function emailDocumentsProps({
   protocols,
   invoice,
   focus,
+  dunning,
+  dunningTotal,
 }: {
   org: Organization;
   order: Order | null;
   customer: Customer;
   protocols: Pick<Protocol, "type" | "completedAt">[];
   invoice: Pick<Invoice, "id" | "number" | "status" | "grossTotal" | "dueDate"> | null;
-  focus: "protocols" | "invoice";
+  focus: "protocols" | "invoice" | "dunning";
+  dunning?: Dunning | null;
+  dunningTotal?: number;
 }) {
   const done = (t: "PICKUP" | "DELIVERY") => protocols.some((p) => p.type === t && p.completedAt);
   const vehicle = order ? [order.make, order.model].filter(Boolean).join(" ") : "";
@@ -50,13 +55,22 @@ export function emailDocumentsProps({
       },
     );
   }
+  if (dunning) {
+    docs.push({
+      key: "DUNNING",
+      label: DUNNING_LEVEL[dunning.level]?.label ?? "Mahnung",
+      available: true,
+      checked: true,
+      downloadUrl: `/api/dunnings/${dunning.id}/pdf`,
+    });
+  }
   if (invoice) {
     docs.push({
       key: "INVOICE",
       label: invoice.number ? `Rechnung ${invoice.number}` : "Rechnung",
       available: Boolean(invoiceIssued),
       hint: invoice.status === "DRAFT" ? "noch nicht festgeschrieben" : "storniert",
-      checked: focus === "invoice",
+      checked: focus === "invoice" || focus === "dunning",
       downloadUrl: `/api/invoices/${invoice.id}/pdf`,
     });
     docs.push({
@@ -73,7 +87,19 @@ export function emailDocumentsProps({
   const ref = order ? `Auftrag ${orderNo(order.number)}${order.reference ? ` / Ihre Referenz ${order.reference}` : ""}` : "";
   let subject: string;
   let body: string;
-  if (focus === "invoice" && invoice) {
+  if (focus === "dunning" && dunning && invoice) {
+    const label = DUNNING_LEVEL[dunning.level]?.label ?? "Mahnung";
+    subject = `${label} zur Rechnung ${invoice.number}`;
+    body = `${greeting},
+
+anbei erhalten Sie unsere ${label} zur Rechnung ${invoice.number}. Bitte überweisen Sie den offenen Betrag${dunningTotal ? ` von ${formatMoney(dunningTotal)}` : ""} bis zum ${formatDate(dunning.dueDate)}.
+Zur Übersicht haben wir die Rechnung noch einmal beigefügt.
+
+Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie diese E-Mail bitte als gegenstandslos.
+
+Mit freundlichen Grüßen
+${company}`;
+  } else if (focus === "invoice" && invoice) {
     subject = `Rechnung ${invoice.number ?? ""}${order ? ` – ${vehicleText}` : ""}`.trim();
     body = `${greeting},
 
@@ -104,6 +130,7 @@ ${company}`;
     subject,
     message: body,
     docs,
+    refs: dunning ? { dunningId: dunning.id } : undefined,
     mailEnabled: mailEnabled(),
   };
 }
