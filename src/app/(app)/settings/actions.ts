@@ -5,6 +5,7 @@ import type { Role } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { RETURN_TYPE } from "@/lib/labels";
+import { normalizeLogo } from "@/lib/logo";
 import { db } from "@/lib/db";
 import { requireManager } from "@/lib/org";
 import { decimal, str } from "@/lib/format";
@@ -34,8 +35,13 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
   let logoFileId = ctx.org.logoFileId;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
-    if (!["image/png", "image/jpeg"].includes(logo.type)) return { error: "Logo bitte als PNG oder JPG hochladen." };
-    const { record } = await saveUpload(ctx.orgId, ctx.user.id, logo);
+    let png: File;
+    try {
+      png = await normalizeLogo(logo);
+    } catch (e) {
+      return { error: e instanceof Error && /Logo/.test(e.message) ? e.message : "Das Logo konnte nicht gelesen werden. Bitte PNG, JPG, WebP oder SVG verwenden." };
+    }
+    const { record } = await saveUpload(ctx.orgId, ctx.user.id, png);
     if (logoFileId) await deleteFile(ctx.orgId, logoFileId);
     logoFileId = record.id;
   } else if (formData.get("removeLogo") === "on" && logoFileId) {

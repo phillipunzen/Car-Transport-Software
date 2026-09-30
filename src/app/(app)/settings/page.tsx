@@ -2,6 +2,7 @@ import { canManage, requireCtx } from "@/lib/org";
 import { toNumber } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
 import { appUrl } from "@/lib/mail";
+import { LogoField } from "@/components/logo-field";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, Field, PageHeader, TextArea } from "@/components/ui";
@@ -32,19 +33,7 @@ export default async function SettingsPage() {
               <Field label="Land" name="country" defaultValue={o.country} />
               <Field label="E-Mail" name="email" type="email" defaultValue={o.email} />
               <Field label="Website" name="website" defaultValue={o.website} />
-              <div>
-                <label htmlFor="logo">Logo (PNG/JPG)</label>
-                <input id="logo" name="logo" type="file" accept="image/png,image/jpeg" className="input file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1" />
-                {o.logoFileId && (
-                  <div className="mt-2 flex items-center gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/files/${o.logoFileId}`} alt="Logo" className="h-10 rounded border border-slate-200 bg-white object-contain p-1" />
-                    <label className="flex items-center gap-1 text-xs font-normal">
-                      <input type="checkbox" name="removeLogo" /> entfernen
-                    </label>
-                  </div>
-                )}
-              </div>
+              <LogoField currentUrl={o.logoFileId ? `/api/files/${o.logoFileId}` : null} />
             </div>
           </Card>
 

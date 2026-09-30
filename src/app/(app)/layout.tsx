@@ -23,13 +23,21 @@ function OrgSwitcher({ current, memberships }: { current: string; memberships: {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireCtx();
+  const logoUrl = ctx.org.logoFileId ? `/api/files/${ctx.org.logoFileId}` : null;
   return (
     <div className="min-h-dvh lg:flex">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-4 lg:flex lg:fixed lg:inset-y-0">
         <Link href="/dashboard" className="mb-6 flex items-center gap-2 px-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.svg" alt="" className="h-8 w-8" />
-          <span className="font-bold">Überführung</span>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt={ctx.org.name} className="h-12 max-w-full object-contain object-left" />
+          ) : (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/icon.svg" alt="" className="h-8 w-8" />
+              <span className="font-bold">Überführung</span>
+            </>
+          )}
         </Link>
         <div className="mb-4 px-2">
           <p className="truncate text-sm font-semibold">{ctx.org.name}</p>
@@ -51,8 +59,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
         <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.svg" alt="" className="h-7 w-7" />
-          <span className="truncate text-sm font-semibold">{ctx.org.name}</span>
+          <img src={logoUrl ?? "/icon.svg"} alt="" className={logoUrl ? "h-8 max-w-[7rem] object-contain" : "h-7 w-7"} />
+          {!logoUrl && <span className="truncate text-sm font-semibold">{ctx.org.name}</span>}
         </Link>
         <div className="flex items-center gap-1">
           <OrgSwitcher current={ctx.orgId} memberships={ctx.memberships} />
