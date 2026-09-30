@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { returnCost } from "@/lib/pricing";
 import { trackingUrl } from "@/lib/tracking";
+import { mileageCheck } from "@/lib/mileage";
 import { TrackingLink } from "@/components/tracking-link";
 import { MoreSection } from "@/components/more-section";
 import { saveAsTemplate } from "../templates/actions";
@@ -64,6 +65,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
   const driver = isDriver(ctx.role);
   const km = toNumber(order.distanceKm);
+  const pickupP = order.protocols.find((p) => p.type === "PICKUP" && p.completedAt);
+  const deliveryP = order.protocols.find((p) => p.type === "DELIVERY" && p.completedAt);
+  const mileage = mileageCheck(pickupP?.mileage, deliveryP?.mileage, km || null);
   const price = order.pricingType === "PER_KM" ? km * toNumber(order.pricePerKm) : toNumber(order.price);
   const expenses = order.expenses.reduce((s, e) => s + toNumber(e.amountGross), 0);
   const route = [
@@ -168,6 +172,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     : `${formatMoney(returnCost(order, order.distanceKm))} (${order.returnType === "FLAT" ? "Pauschale" : `${formatMoney(order.returnPerKm)}/km`})`,
               ],
               ["Belege", !driver && expenses ? formatMoney(expenses) : null],
+              [
+                "Gefahren",
+                mileage
+                  ? `${formatNumber(mileage.driven, 0)} km${km ? ` (geplant ${formatNumber(km, 0)} km)` : ""}${mileage.message ? ` – ⚠️ ${mileage.message}` : ""}`
+                  : null,
+              ],
+              ["Tank / Ladung", pickupP?.fuelLevel != null && deliveryP?.fuelLevel != null ? `${pickupP.fuelLevel} % → ${deliveryP.fuelLevel} %` : null],
             ]}
           />
         </Card>

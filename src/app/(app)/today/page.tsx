@@ -1,4 +1,6 @@
+import { Fragment } from "react";
 import Link from "next/link";
+import { chainGaps } from "@/lib/tour-chain";
 import type { Customer, Order, Protocol, User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
@@ -108,6 +110,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     }),
   ]);
   const steps = await nextSteps([...onTheRoad, ...todays, ...overdue]);
+  // Eigene Tourenkette heute: Leerfahrt zwischen Zustellung und nächster Abholung
+  const gaps = new Map((showAll ? [] : await chainGaps([...onTheRoad, ...todays])).map((g) => [g.toId, g]));
   const dateLabel = new Date().toLocaleDateString("de-DE", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long" });
   const first = (ctx.user.name ?? "").split(" ")[0];
   const nothing = onTheRoad.length + todays.length + overdue.length === 0;
@@ -120,7 +124,14 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         </h2>
         <ul className="grid gap-3 lg:grid-cols-2">
           {list.map((o) => (
-            <TourCard key={o.id} o={o} next={steps.get(o.id)} showDriver={showAll} />
+            <Fragment key={o.id}>
+              {gaps.has(o.id) && (
+                <li className="-my-1 text-center text-xs text-slate-500 lg:col-span-2">
+                  ⤓ {gaps.get(o.id)!.same ? `Anschluss vor Ort in ${gaps.get(o.id)!.to}` : `Leerfahrt nach ${gaps.get(o.id)!.to}${gaps.get(o.id)!.km !== null ? ` · ${Math.round(gaps.get(o.id)!.km!)} km` : ""}`}
+                </li>
+              )}
+              <TourCard o={o} next={steps.get(o.id)} showDriver={showAll} />
+            </Fragment>
           ))}
         </ul>
       </section>

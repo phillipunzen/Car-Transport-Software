@@ -137,6 +137,7 @@ export default async function ProtocolPage({ params }: { params: Promise<{ id: s
         orderId={order.id}
         type={type}
         terms={ctx.org.protocolTerms}
+        mileageRef={type === "DELIVERY" ? { pickup: pickup?.mileage ?? null, planned: order.distanceKm ? Number(order.distanceKm) : null } : undefined}
         values={{
           performedAt: toDateTimeLocal(protocol?.performedAt ?? new Date()),
           location: protocol?.location ?? address.filter(Boolean).join(" "),

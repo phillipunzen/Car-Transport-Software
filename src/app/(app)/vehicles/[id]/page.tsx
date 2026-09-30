@@ -52,9 +52,14 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
         }
         subtitle={vehicle.vin ?? "FIN unbekannt"}
         actions={
-          <Link href={`/orders/new?vehicleId=${vehicle.id}`} className="btn-primary">
-            + Neuer Auftrag
-          </Link>
+          <>
+            <a href={`/api/vehicles/${vehicle.id}/logbook`} className="btn-secondary">
+              Fahrtenbuch (CSV)
+            </a>
+            <Link href={`/orders/new?vehicleId=${vehicle.id}`} className="btn-primary">
+              + Neuer Auftrag
+            </Link>
+          </>
         }
       />
       <div className="grid gap-6 lg:grid-cols-5">

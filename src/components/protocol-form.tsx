@@ -1,5 +1,6 @@
 "use client";
 
+import { mileageCheck } from "@/lib/mileage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -21,7 +22,14 @@ export type ProtocolValues = {
   signatureDriver: string | null;
 };
 
-type Props = { orderId: string; type: "PICKUP" | "DELIVERY"; values: ProtocolValues; terms?: string | null };
+type Props = {
+  orderId: string;
+  type: "PICKUP" | "DELIVERY";
+  values: ProtocolValues;
+  terms?: string | null;
+  /** Übergabe: Kilometerstand bei Abholung und geplante Strecke für die Plausibilitätsprüfung */
+  mileageRef?: { pickup: number | null; planned: number | null };
+};
 
 /** Liest die aktuellen Formularwerte aus (für die Sicherung auf dem Gerät). */
 function readForm(form: HTMLFormElement, signatures: Partial<Record<"signatureCustomer" | "signatureDriver", string>>): ProtocolValues {
@@ -116,10 +124,14 @@ function ProtocolFormInner({
   type,
   values,
   terms,
+  mileageRef,
   onDraft,
   onSaved,
 }: Props & { onDraft: (v: ProtocolValues) => void; onSaved: () => void }) {
   const [fuel, setFuel] = useState(values.fuelLevel);
+  const [km, setKm] = useState(values.mileage);
+  const kmNum = Number(km.replace(/\D/g, ""));
+  const kmHint = mileageRef && km ? mileageCheck(mileageRef.pickup, kmNum || null, mileageRef.planned) : null;
   const wrapper = useRef<HTMLDivElement>(null);
   const signatures = useRef<Partial<Record<"signatureCustomer" | "signatureDriver", string>>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,7 +162,16 @@ function ProtocolFormInner({
           <label htmlFor="mileage">
             Kilometerstand <span className="text-red-500">*</span>
           </label>
-          <input id="mileage" name="mileage" inputMode="numeric" defaultValue={values.mileage} className="input" placeholder="z. B. 45230" />
+          <input
+            id="mileage"
+            name="mileage"
+            inputMode="numeric"
+            defaultValue={values.mileage}
+            onChange={(e) => setKm(e.target.value)}
+            className="input"
+            placeholder="z. B. 45230"
+          />
+          {kmHint && <p className={`mt-1 text-xs ${kmHint.status === "ok" ? "text-slate-500" : "text-amber-700"}`}>{kmHint.message ?? `${Math.round(kmHint.driven)} km gefahren`}</p>}
         </div>
         <div>
           <label htmlFor="fuelLevel">Tankfüllung / Ladestand: {fuel} %</label>

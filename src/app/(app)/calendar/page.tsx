@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { memberOptions } from "@/lib/queries";
 import { berlinDay, weekOf } from "@/lib/calendar";
-import { formatDate, orderNo, toDateTimeLocal } from "@/lib/format";
+import { formatDate, formatNumber, orderNo, toDateTimeLocal } from "@/lib/format";
+import { isDriver } from "@/lib/permissions";
+import { chainGaps, followUps, type Gap } from "@/lib/tour-chain";
 import { ORDER_STATUS } from "@/lib/labels";
 import { Card, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
@@ -39,6 +41,25 @@ function PlanForm({ order, members }: { order: Row; members: { id: string; name:
   );
 }
 
+function GapLine({ gap }: { gap: Gap }) {
+  return (
+    <p className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+      <span className="text-slate-400">⤷</span>
+      {gap.same ? (
+        <>Anschluss vor Ort ({gap.to}) – keine Leerfahrt</>
+      ) : (
+        <>
+          Leerfahrt {gap.from} → {gap.to}
+          {gap.km !== null ? ` · ${formatNumber(gap.km, 0)} km${gap.minutes ? `, ca. ${Math.floor(gap.minutes / 60)}:${String(gap.minutes % 60).padStart(2, "0")} Std.` : ""}` : ""}
+          <a href={gap.mapsUrl} target="_blank" rel="noreferrer" className="text-brand-600">
+            Route
+          </a>
+        </>
+      )}
+    </p>
+  );
+}
+
 function Chip({ o, showDriver }: { o: Row; showDriver?: boolean }) {
   const cancelled = o.status === "CANCELLED";
   return (
@@ -56,10 +77,12 @@ function Chip({ o, showDriver }: { o: Row; showDriver?: boolean }) {
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ week?: string; mine?: string }> }) {
   const ctx = await requireCtx();
-  const { week, mine } = await searchParams;
+  const { week, mine: mineParam } = await searchParams;
+  const driver = isDriver(ctx.role);
+  const mine = driver ? "1" : mineParam;
   const w = weekOf(week);
   const today = berlinDay(new Date());
-  const [orders, unplanned, members] = await Promise.all([
+  const [orders, unplanned, members, planned] = await Promise.all([
     db.order.findMany({
       where: { organizationId: ctx.orgId, pickupDate: { gte: w.start, lt: w.end }, ...(mine ? { assignedToId: ctx.user.id } : {}) },
       include: { assignedTo: true },
@@ -70,13 +93,36 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         organizationId: ctx.orgId,
         status: { in: ["DRAFT", "PLANNED"] },
         OR: [{ pickupDate: null }, { assignedToId: null }],
+        ...(driver ? { id: "-" } : {}),
       },
       include: { assignedTo: true },
       orderBy: [{ pickupDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
       take: 50,
     }),
     memberOptions(ctx.orgId),
+    // Geplante Touren der nächsten Wochen – für Anschluss-Vorschläge
+    driver
+      ? Promise.resolve([] as Row[])
+      : db.order.findMany({
+          where: {
+            organizationId: ctx.orgId,
+            status: { in: ["PLANNED", "IN_TRANSIT"] },
+            assignedToId: { not: null },
+            pickupDate: { gte: new Date(Date.now() - 86400000), lt: new Date(Date.now() + 21 * 86400000) },
+          },
+          include: { assignedTo: true },
+          orderBy: { pickupDate: "asc" },
+        }),
   ]);
+  // Leerfahrten zwischen aufeinanderfolgenden Touren eines Fahrers (je Tag)
+  const budget = { left: 8 };
+  const gapByTarget = new Map<string, Gap>();
+  for (const d of w.days) {
+    const dayList = orders.filter((o) => o.pickupDate && berlinDay(o.pickupDate) === d && o.assignedToId && o.status !== "CANCELLED");
+    for (const driverId of new Set(dayList.map((o) => o.assignedToId))) {
+      for (const g of await chainGaps(dayList.filter((o) => o.assignedToId === driverId), budget)) gapByTarget.set(g.toId, g);
+    }
+  }
   const byDay = (key: string, list: Row[]) => list.filter((o) => o.pickupDate && berlinDay(o.pickupDate) === key);
   const lanes = [...members.filter((m) => !mine || m.id === ctx.user.id), ...(mine ? [] : [{ id: "", name: "Nicht zugewiesen" }])].filter(
     (lane) => lane.id !== "" || orders.some((o) => !o.assignedToId),
@@ -107,7 +153,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <Link href={q({ week: w.next })} className="btn-secondary px-3" aria-label="Nächste Woche">
           →
         </Link>
-        <div className="ml-auto flex gap-1">
+        <div className={driver ? "hidden" : "ml-auto flex gap-1"}>
           <Link href={q({ mine: undefined })} className={`rounded-full px-3 py-1.5 text-sm font-medium ${!mine ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>
             Alle Fahrer
           </Link>
@@ -169,8 +215,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   <p className="text-sm text-slate-500">Keine Touren.</p>
                 ) : (
                   <ul className="-my-2 divide-y divide-slate-100">
-                    {list.map((o) => (
+                    {[...list]
+                      .sort((a, b) => (a.assignedTo?.name ?? "~").localeCompare(b.assignedTo?.name ?? "~") || a.pickupDate!.getTime() - b.pickupDate!.getTime())
+                      .map((o) => (
                       <li key={o.id} className="py-2">
+                        {gapByTarget.has(o.id) && <GapLine gap={gapByTarget.get(o.id)!} />}
                         <div className="flex items-start justify-between gap-2">
                           <Link href={`/orders/${o.id}`} className="min-w-0 text-sm hover:text-brand-600">
                             <span className="font-semibold">{time(o.pickupDate)}</span> · {orderNo(o.number)} · {o.pickupCity ?? "?"} → {o.deliveryCity ?? "?"}
@@ -180,7 +229,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           </Link>
                           <span className={`badge shrink-0 ${ORDER_STATUS[o.status].color}`}>{ORDER_STATUS[o.status].label}</span>
                         </div>
-                        {["DRAFT", "PLANNED"].includes(o.status) && (
+                        {!driver && ["DRAFT", "PLANNED"].includes(o.status) && (
                           <details className="mt-1">
                             <summary className="cursor-pointer text-xs font-medium text-brand-600">Umplanen</summary>
                             <div className="mt-2">
@@ -198,7 +247,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           {orders.length === 0 && <p className="text-sm text-slate-500">In dieser Woche sind keine Touren geplant.</p>}
         </div>
 
-        <div className="space-y-4">
+        <div className={driver ? "hidden" : "space-y-4"}>
           <Card title={`Noch einzuplanen (${unplanned.length})`}>
             {unplanned.length === 0 ? (
               <p className="text-sm text-slate-500">Alle Aufträge haben Termin und Fahrer. 👍</p>
@@ -206,6 +255,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               <ul className="-my-2 divide-y divide-slate-100">
                 {unplanned.map((o) => (
                   <li key={o.id} className="space-y-2 py-3">
+                    {followUps(o, planned).map((f) => (
+                      <form key={f.id} action={planOrder} className="flex flex-wrap items-center gap-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-xs text-emerald-800">
+                        <input type="hidden" name="orderId" value={o.id} />
+                        <input type="hidden" name="assignedToId" value={f.assignedToId!} />
+                        <input type="hidden" name="pickupDate" value={toDateTimeLocal(o.pickupDate ?? new Date(f.pickupDate!.getTime() + ((f.durationMinutes ?? 150) + 30) * 60000))} />
+                        <span className="flex-1">
+                          💡 Anschluss an {orderNo(f.number)}: {f.assignedTo?.name ?? "Fahrer"} ist am {formatDate(f.pickupDate)} in {f.deliveryCity ?? "der Nähe"} – spart die Rückreise.
+                        </span>
+                        <SubmitButton className="rounded bg-emerald-600 px-2 py-1 font-semibold text-white">Einplanen</SubmitButton>
+                      </form>
+                    ))}
                     <Link href={`/orders/${o.id}`} className="block text-sm hover:text-brand-600">
                       <span className="font-medium">{orderNo(o.number)}</span> · {o.pickupCity ?? "?"} → {o.deliveryCity ?? "?"}
                       <span className="block text-xs text-slate-500">
@@ -226,6 +286,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                 Aufträge ohne Termin oder Fahrer stehen unter <strong>„Noch einzuplanen“</strong>. Fahrer und Abholtermin wählen, <strong>Einplanen</strong> – fertig.
               </li>
               <li>Geplante Touren erscheinen im Wochenraster in der Zeile des Fahrers. Über „Umplanen“ lassen sich Termin und Fahrer jederzeit ändern.</li>
+              <li>
+                Zwischen zwei Touren eines Fahrers zeigt die Tagesliste die <strong>Leerfahrt</strong> (km und Fahrzeit). Endet eine Tour in der Nähe einer offenen Abholung, erscheint ein
+                grüner <strong>Anschluss-Vorschlag</strong> – so entfällt die Rückreise.
+              </li>
               <li>
                 Jeder Fahrer sieht seine Touren unter <strong>„Heute“</strong> – mit Navigation, Anruf beim Kontakt und dem nächsten Arbeitsschritt.
               </li>
