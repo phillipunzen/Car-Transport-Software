@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate, orderNo } from "@/lib/format";
 import { DAMAGE_AREAS, DAMAGE_SEVERITY, DAMAGE_TYPES, ORDER_STATUS } from "@/lib/labels";
 import { customerOptions } from "@/lib/queries";
@@ -10,9 +10,10 @@ import { Badge, Card, PageHeader } from "@/components/ui";
 import { VehicleForm } from "@/components/vehicle-form";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteVehicle, deleteVehicleDocument, updateVehicle } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function VehiclePage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const vehicle = await db.vehicle.findFirst({
     where: { id, organizationId: ctx.orgId },

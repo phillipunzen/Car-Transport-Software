@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type { InquiryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { formatDateTime } from "@/lib/format";
 import { INQUIRY_STATUS } from "@/lib/labels";
 import { Badge, Empty, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Anfragen" };
 
 export default async function InquiriesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { status = "NEW" } = await searchParams;
   const valid = INQUIRY_STATUS[status] ? (status as InquiryStatus) : undefined;
   const inquiries = await db.inquiry.findMany({

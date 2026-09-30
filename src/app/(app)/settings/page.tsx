@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { canManage, requireCtx } from "@/lib/org";
 import { toNumber } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
@@ -13,12 +14,13 @@ export const metadata = { title: "Einstellungen" };
 
 export default async function SettingsPage() {
   const ctx = await requireCtx();
+  if (ctx.role === "DRIVER") redirect("/settings/security");
   const o = ctx.org;
   const readOnly = !canManage(ctx.role);
   return (
     <>
       <PageHeader title="Einstellungen" subtitle="Diese Angaben erscheinen automatisch auf Rechnungen und Protokollen." />
-      <SettingsNav active="company" />
+      <SettingsNav active="company" fleet={ctx.org.moduleFleet} />
       {readOnly && <p className="mb-4 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">Nur Inhaber und Administratoren können diese Angaben ändern.</p>}
       <ActionForm action={saveSettings} className="space-y-6">
         <fieldset disabled={readOnly} className="space-y-6">

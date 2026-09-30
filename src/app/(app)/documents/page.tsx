@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { requireCtx } from "@/lib/org";
+
 import { formatDate, formatMoney } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { customerOptions } from "@/lib/queries";
 import { parseFilters, queryDocuments, type DocumentFilters } from "@/lib/documents";
 import { Empty, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Belege & Dokumente" };
 
@@ -24,7 +25,7 @@ function Tag({ href, children, className = "" }: { href: string; children: React
 }
 
 export default async function DocumentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const f = parseFilters(await searchParams);
   const [rows, customers] = await Promise.all([queryDocuments(ctx.orgId, f, 300), customerOptions(ctx.orgId)]);
   const expenses = rows.filter((r) => r.type === "expense");

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { fromDateTimeLocal, str } from "@/lib/format";
 import { logEvent } from "../orders/actions";
+import { requireOffice } from "@/lib/permissions";
 
 /** Persönlichen Kalender-Link erzeugen bzw. erneuern (alter Link wird ungültig). */
 export async function resetCalendarToken() {
@@ -22,7 +23,7 @@ export async function removeCalendarToken() {
 
 /** Tour einplanen: Fahrer und Abholtermin setzen (Entwurf wird dadurch „Geplant“). */
 export async function planOrder(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const order = await db.order.findFirst({ where: { id: String(formData.get("orderId")), organizationId: ctx.orgId }, include: { assignedTo: true } });
   if (!order) throw new Error("Auftrag nicht gefunden");
   const assignedToId = str(formData.get("assignedToId"));

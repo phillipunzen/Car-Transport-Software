@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDateTime, formatMoney, orderNo, toNumber } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
 import { berlinDay, dayBounds } from "@/lib/calendar";
 import { Badge, Card, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Übersicht" };
 
@@ -19,7 +20,7 @@ function Stat({ label, value, href, hint }: { label: string; value: string | num
 }
 
 export default async function DashboardPage() {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const orgId = ctx.orgId;
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

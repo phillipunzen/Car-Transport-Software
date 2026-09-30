@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { InvoiceStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate, formatMoney, toNumber } from "@/lib/format";
 import { INVOICE_STATUS } from "@/lib/labels";
 import { DUNNING_LEVEL } from "@/lib/dunning";
@@ -9,11 +9,12 @@ import { customerOptions } from "@/lib/queries";
 import { Badge, Empty, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { createInvoice } from "./actions";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Rechnungen" };
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { status } = await searchParams;
   const valid = status && INVOICE_STATUS[status] ? (status as InvoiceStatus) : undefined;
   const overdueOnly = status === "OVERDUE";

@@ -10,10 +10,11 @@ import { EXPENSE_CATEGORY, TRAVEL_CATEGORIES } from "@/lib/labels";
 import { expenseLock, lockMessage } from "@/lib/expense-lock";
 import { perDiem } from "@/lib/per-diem";
 import { logEvent } from "../../actions";
+import { orderWhere } from "@/lib/permissions";
 
 async function orderFor(orderId: string, opts: { write?: boolean } = { write: true }) {
   const ctx = await requireCtx();
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
+  const order = await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) });
   if (!order) throw new Error("Auftrag nicht gefunden");
   const lock = await expenseLock(order.id);
   if (opts.write && lock.locked) throw new Error(lockMessage(lock));

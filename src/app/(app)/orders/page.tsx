@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
+import { isDriver, orderWhere } from "@/lib/permissions";
 import { customerName, formatDateTime, orderNo } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
 import { Badge, Empty, PageHeader } from "@/components/ui";
@@ -22,8 +23,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const { q, f = "active", mine } = await searchParams;
   const filter = FILTERS.find((x) => x.key === f) ?? FILTERS[0];
 
+  const driver = isDriver(ctx.role);
   const where: Prisma.OrderWhereInput = {
-    organizationId: ctx.orgId,
+    ...orderWhere(ctx),
     ...(filter.statuses ? { status: { in: filter.statuses } } : {}),
     ...(mine ? { assignedToId: ctx.user.id } : {}),
     ...(q
@@ -56,7 +58,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <>
-      <PageHeader title="Aufträge" actions={<Link href="/orders/new" className="btn-primary">+ Neuer Auftrag</Link>} />
+      <PageHeader
+        title={driver ? "Meine Aufträge" : "Aufträge"}
+        actions={
+          !driver && (
+            <Link href="/orders/new" className="btn-primary">
+              + Neuer Auftrag
+            </Link>
+          )
+        }
+      />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           {FILTERS.map((x) => (
@@ -68,12 +79,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               {x.label}
             </Link>
           ))}
-          <Link
-            href={qs({ mine: mine ? undefined : "1" })}
-            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${mine ? "bg-slate-800 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
-          >
-            Meine
-          </Link>
+          {!driver && (
+            <Link
+              href={qs({ mine: mine ? undefined : "1" })}
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${mine ? "bg-slate-800 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+            >
+              Meine
+            </Link>
+          )}
         </div>
         <form>
           <input type="hidden" name="f" value={f} />

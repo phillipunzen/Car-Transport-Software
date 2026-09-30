@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerOptions, memberOptions } from "@/lib/queries";
 import { recognitionMode } from "@/lib/recognition";
 import { geoEnabled } from "@/lib/geo";
@@ -8,11 +8,12 @@ import { effectiveConditions } from "@/lib/pricing";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { createOrder } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Neuer Auftrag" };
 
 export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ customerId?: string; vehicleId?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { customerId, vehicleId } = await searchParams;
   const [customers, members, vehicles] = await Promise.all([customerOptions(ctx.orgId), memberOptions(ctx.orgId), vehicleOptions(ctx.orgId)]);
   const values: Record<string, string> = { assignedToId: ctx.user.id };

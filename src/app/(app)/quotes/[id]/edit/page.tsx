@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerOptions } from "@/lib/queries";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
@@ -8,9 +8,10 @@ import { toDateTimeLocal } from "@/lib/format";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { updateQuoteDetails } from "../../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const quote = await db.quote.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!quote) notFound();

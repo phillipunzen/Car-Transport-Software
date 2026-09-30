@@ -39,6 +39,14 @@ export const ROLE: Record<string, string> = {
   OWNER: "Inhaber",
   ADMIN: "Administrator",
   MEMBER: "Mitarbeiter",
+  DRIVER: "Fahrer",
+};
+
+export const ROLE_HINT: Record<string, string> = {
+  OWNER: "alles, inkl. Inhaberrechte",
+  ADMIN: "alles inkl. Einstellungen & Team",
+  MEMBER: "Büro: Aufträge, Kunden, Angebote, Rechnungen",
+  DRIVER: "nur eigene Touren – ohne Preise, Kunden und Rechnungen",
 };
 
 export const STAGE: Record<string, string> = {

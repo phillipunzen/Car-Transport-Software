@@ -9,8 +9,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const session = await auth();
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
   const { id, type } = await params;
-  const order = await db.order.findUnique({ where: { id }, select: { organizationId: true } });
-  const orgId = await memberOrgFor(session.user.id, order?.organizationId);
+  const order = await db.order.findUnique({ where: { id }, select: { organizationId: true, assignedToId: true } });
+  const orgId = await memberOrgFor(session.user.id, order?.organizationId, { assignedToId: order?.assignedToId ?? null });
   if (!orgId) return new NextResponse("Not found", { status: 404 });
   const result = await protocolPdf(orgId, id, type === "delivery" ? "DELIVERY" : "PICKUP");
   if (!result) return new NextResponse("Protokoll existiert noch nicht", { status: 404 });

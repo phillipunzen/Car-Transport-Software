@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, customerNo, formatDate, formatMoney, orderNo } from "@/lib/format";
 import { INVOICE_STATUS, ORDER_STATUS } from "@/lib/labels";
 import { CustomerForm } from "@/components/customer-form";
@@ -9,9 +9,10 @@ import { toPlain } from "@/lib/plain";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteCustomer, updateCustomer } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const customer = await db.customer.findFirst({
     where: { id, organizationId: ctx.orgId },

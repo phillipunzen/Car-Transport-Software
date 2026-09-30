@@ -8,12 +8,13 @@ import { ORDER_STATUS } from "@/lib/labels";
 import { Badge, PageHeader } from "@/components/ui";
 import { OrderTabs } from "@/components/order-tabs";
 import { OrderProgress } from "@/components/order-progress";
+import { isDriver, orderWhere } from "@/lib/permissions";
 
 export default async function OrderLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const order = await db.order.findFirst({
-    where: { id, organizationId: ctx.orgId },
+    where: orderWhere(ctx, { id }),
     include: {
       customer: true,
       quote: { select: { id: true, number: true } },
@@ -46,6 +47,7 @@ export default async function OrderLayout({ children, params }: { children: Reac
     skipped: parseSkipped(order.skippedSteps),
   };
   const vehicle = [order.make, order.model].filter(Boolean).join(" ");
+  const driver = isDriver(ctx.role);
   return (
     <>
       <PageHeader
@@ -74,8 +76,8 @@ export default async function OrderLayout({ children, params }: { children: Reac
       />
         <OrderProgress
           orderId={order.id}
-          steps={orderSteps(input)}
-          invoiceId={invoice?.id ?? null}
+          steps={driver ? orderSteps(input).filter((st) => st.key !== "invoice" && st.key !== "payment") : orderSteps(input)}
+          invoiceId={driver ? null : (invoice?.id ?? null)}
           invoiceNumber={invoice?.number ?? null}
           expenses={order._count.expenses}
           missing={missingOrderData(input)}

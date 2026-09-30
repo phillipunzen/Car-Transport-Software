@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx, type Ctx } from "@/lib/org";
+import { type Ctx } from "@/lib/org";
 import { str } from "@/lib/format";
 import { deleteFile, saveUpload } from "@/lib/files";
 import type { FormState } from "@/components/action-form";
+import { requireOffice } from "@/lib/permissions";
 
 async function vehicleData(orgId: string, formData: FormData) {
   const customerId = str(formData.get("customerId"));
@@ -43,7 +44,7 @@ async function saveDocuments(ctx: Ctx, vehicleId: string, formData: FormData) {
 }
 
 export async function createVehicle(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   let data;
   try {
     data = await vehicleData(ctx.orgId, formData);
@@ -63,7 +64,7 @@ export async function createVehicle(_: FormState, formData: FormData): Promise<F
 }
 
 export async function updateVehicle(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const id = String(formData.get("id"));
   let data;
   try {
@@ -87,7 +88,7 @@ export async function updateVehicle(_: FormState, formData: FormData): Promise<F
 }
 
 export async function deleteVehicle(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const id = String(formData.get("id"));
   const vehicle = await db.vehicle.findFirst({ where: { id, organizationId: ctx.orgId }, include: { documents: true } });
   if (!vehicle) redirect("/vehicles");
@@ -98,7 +99,7 @@ export async function deleteVehicle(formData: FormData) {
 }
 
 export async function deleteVehicleDocument(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const doc = await db.vehicleDocument.findFirst({
     where: { id: String(formData.get("documentId")), vehicle: { organizationId: ctx.orgId } },
   });

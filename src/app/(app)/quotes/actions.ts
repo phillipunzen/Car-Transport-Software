@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { PricingType, QuoteStatus, TransportMode } from "@prisma/client";
 import { db } from "@/lib/db";
-import { canManage, nextNumber, requireCtx, type Ctx } from "@/lib/org";
+import { canManage, nextNumber, type Ctx } from "@/lib/org";
 import { addressLines, decimal, formatDate, fromDateTimeLocal, str, toNumber } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
 import { computeTotals, type ItemInput } from "@/lib/invoice";
@@ -13,6 +13,7 @@ import { transportItems } from "@/lib/pricing";
 import { syncVehicle } from "@/lib/vehicles";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../orders/actions";
+import { requireOffice } from "@/lib/permissions";
 
 async function requireQuote(ctx: Ctx, id: string) {
   const quote = await db.quote.findFirst({ where: { id, organizationId: ctx.orgId }, include: { items: { orderBy: { position: "asc" } } } });
@@ -51,7 +52,7 @@ const vatFor = (ctx: Ctx) => (ctx.org.smallBusiness ? 0 : toNumber(ctx.org.defau
 
 /** Neues Angebot aus den Eckdaten – Positionen werden automatisch berechnet und sind danach frei editierbar. */
 export async function createQuote(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const customerId = str(formData.get("customerId"));
   const customer = customerId ? await db.customer.findFirst({ where: { id: customerId, organizationId: ctx.orgId } }) : null;
   if (!customer) return { error: "Bitte wähle einen Kunden aus." };
@@ -85,7 +86,7 @@ export async function createQuote(_: FormState, formData: FormData): Promise<For
 
 /** Eckdaten ändern: berechnete Positionen (Transport, Rückreise) werden erneuert, eigene Positionen bleiben. */
 export async function updateQuoteDetails(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   if (quote.status === "ACCEPTED") return { error: "Angenommene Angebote können nicht mehr geändert werden." };
   const customerId = str(formData.get("customerId"));
@@ -128,7 +129,7 @@ const ItemsSchema = z.array(
 
 /** Positionen und Texte speichern (Editor). */
 export async function saveQuote(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   if (quote.status === "ACCEPTED") return { error: "Angenommene Angebote können nicht mehr geändert werden." };
   let items: ItemInput[];
@@ -167,7 +168,7 @@ export async function saveQuote(_: FormState, formData: FormData): Promise<FormS
 }
 
 export async function setQuoteStatus(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   const status = String(formData.get("status")) as QuoteStatus;
   if (!["DRAFT", "SENT", "DECLINED"].includes(status) || quote.status === "ACCEPTED") return;
@@ -178,7 +179,7 @@ export async function setQuoteStatus(formData: FormData) {
 
 /** Angebot angenommen → Auftrag mit allen Eckdaten anlegen. Die Rechnung übernimmt später die Angebotspositionen. */
 export async function acceptQuote(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   if (quote.orderId) redirect(`/orders/${quote.orderId}`);
   const vehicle = { licensePlate: quote.licensePlate, make: quote.make, model: quote.model, vin: null, color: null, firstRegistration: null, vehicleType: null };
@@ -221,7 +222,7 @@ export async function acceptQuote(formData: FormData) {
 }
 
 export async function deleteQuote(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   if (quote.status === "ACCEPTED" && !canManage(ctx.role)) throw new Error("Angenommene Angebote können nur Administratoren löschen.");
   await db.quote.delete({ where: { id: quote.id } });

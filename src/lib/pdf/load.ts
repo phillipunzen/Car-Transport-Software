@@ -102,9 +102,18 @@ export async function damageReportPdf(orgId: string, orderId: string) {
   return { pdf, filename: `Schadensmeldung_${orderNo(order.number)}.pdf` };
 }
 
-/** Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen). */
-export async function memberOrgFor(userId: string, organizationId: string | null | undefined) {
+/**
+ * Organisation des angemeldeten Benutzers, zu der ein Objekt gehört (für die PDF-Routen).
+ * Fahrer: keine Büro-Dokumente (Rechnungen, Angebote, Mahnungen) und nur eigene Aufträge.
+ */
+export async function memberOrgFor(
+  userId: string,
+  organizationId: string | null | undefined,
+  opts: { office?: boolean; assignedToId?: string | null } = {},
+) {
   if (!organizationId) return null;
   const m = await db.membership.findFirst({ where: { userId, organizationId } });
-  return m ? organizationId : null;
+  if (!m) return null;
+  if (m.role === "DRIVER" && (opts.office || ("assignedToId" in opts && opts.assignedToId !== userId))) return null;
+  return organizationId;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { returnCost } from "@/lib/pricing";
 import { trackingUrl } from "@/lib/tracking";
 import { TrackingLink } from "@/components/tracking-link";
+import { MoreSection } from "@/components/more-section";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
@@ -12,6 +13,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { EmailDocuments } from "@/components/email-documents";
 import { emailDocumentsProps } from "@/lib/email-docs";
 import { deleteOrder, setOrderStatus } from "../actions";
+import { isDriver, orderWhere } from "@/lib/permissions";
 
 function Address({ o, p }: { o: Record<string, unknown>; p: "pickup" | "delivery" }) {
   const g = (k: string) => (o[`${p}${k}`] as string | null) ?? null;
@@ -45,7 +47,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const ctx = await requireCtx();
   const { id } = await params;
   const order = await db.order.findFirst({
-    where: { id, organizationId: ctx.orgId },
+    where: orderWhere(ctx, { id }),
     include: {
       customer: true,
       assignedTo: true,
@@ -58,6 +60,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   });
   if (!order) notFound();
 
+  const driver = isDriver(ctx.role);
   const km = toNumber(order.distanceKm);
   const price = order.pricingType === "PER_KM" ? km * toNumber(order.pricePerKm) : toNumber(order.price);
   const expenses = order.expenses.reduce((s, e) => s + toNumber(e.amountGross), 0);
@@ -128,7 +131,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 order,
                 customer: order.customer,
                 protocols: order.protocols,
-                invoice: order.invoices.find((i) => i.status !== "CANCELLED") ?? null,
+                invoice: driver ? null : (order.invoices.find((i) => i.status !== "CANCELLED") ?? null),
                 focus: "protocols",
                 deliveryDamages: order._count.damages,
               })}
@@ -138,16 +141,6 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 ⚠️ Schadensmeldung (PDF)
               </a>
             )}
-          </Card>
-        )}
-        {order.status !== "CANCELLED" && (
-          <Card title="Status-Link für den Kunden">
-            <TrackingLink
-              orderId={order.id}
-              url={order.trackingToken ? trackingUrl(order.trackingToken) : null}
-              email={order.customer.email}
-              text={`Den aktuellen Stand Ihrer Fahrzeugüberführung ${orderNo(order.number)} sehen Sie hier:`}
-            />
           </Card>
         )}
         <Card title="Details">
@@ -163,21 +156,32 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   ? `${formatNumber(km, 1)} km${order.durationMinutes ? ` · ca. ${Math.floor(order.durationMinutes / 60)} Std. ${order.durationMinutes % 60} Min.` : ""}`
                   : null,
               ],
-              ["Preis (netto)", price ? formatMoney(price) + (order.pricingType === "PER_KM" ? ` (${formatMoney(order.pricePerKm)}/km)` : "") : null],
+              ["Preis (netto)", !driver && price ? formatMoney(price) + (order.pricingType === "PER_KM" ? ` (${formatMoney(order.pricePerKm)}/km)` : "") : null],
               [
                 "Rückreise",
-                order.returnType === "NONE"
+                driver || order.returnType === "NONE"
                   ? null
                   : order.returnType === "RECEIPTS"
                     ? RETURN_TYPE.RECEIPTS
                     : `${formatMoney(returnCost(order, order.distanceKm))} (${order.returnType === "FLAT" ? "Pauschale" : `${formatMoney(order.returnPerKm)}/km`})`,
               ],
-              ["Belege", expenses ? formatMoney(expenses) : null],
+              ["Belege", !driver && expenses ? formatMoney(expenses) : null],
             ]}
           />
         </Card>
 
-        {order.invoices.length > 0 && (
+        <MoreSection title="Status-Link, Verlauf & weitere Optionen">
+        {order.status !== "CANCELLED" && (
+          <Card title="Status-Link für den Kunden">
+            <TrackingLink
+              orderId={order.id}
+              url={order.trackingToken ? trackingUrl(order.trackingToken) : null}
+              email={order.customer.email}
+              text={`Den aktuellen Stand Ihrer Fahrzeugüberführung ${orderNo(order.number)} sehen Sie hier:`}
+            />
+          </Card>
+        )}
+        {!driver && order.invoices.length > 0 && (
           <Card title="Rechnungen">
             <ul className="space-y-2">
               {order.invoices.map((i) => (
@@ -229,6 +233,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </form>
           )}
         </Card>
+        </MoreSection>
       </div>
     </div>
   );

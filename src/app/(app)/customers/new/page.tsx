@@ -1,3 +1,4 @@
+import { requireOffice } from "@/lib/permissions";
 import { CustomerForm } from "@/components/customer-form";
 import { Card, PageHeader } from "@/components/ui";
 import { createCustomer } from "../actions";
@@ -5,6 +6,7 @@ import { createCustomer } from "../actions";
 export const metadata = { title: "Neuer Kunde" };
 
 export default async function NewCustomerPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+  await requireOffice();
   const { returnTo } = await searchParams;
   return (
     <>

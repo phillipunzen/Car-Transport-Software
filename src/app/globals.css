@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Büro-Ansicht: großer Bildschirm mit Maus – zeigt alle Zwischenschritte. Handy/iPad bleiben aufgeräumt. */
+@custom-variant office (@media (min-width: 64rem) and (pointer: fine));
+@custom-variant touch (@media not ((min-width: 64rem) and (pointer: fine)));
+
 @theme {
   --color-brand-50: #eef6ff;
   --color-brand-100: #d9eaff;

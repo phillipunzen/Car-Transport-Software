@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerOptions } from "@/lib/queries";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
@@ -7,11 +7,12 @@ import { effectiveConditions } from "@/lib/pricing";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { createQuote } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Neues Angebot" };
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customerId?: string; inquiryId?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { customerId, inquiryId } = await searchParams;
   const [customers, vehicles] = await Promise.all([customerOptions(ctx.orgId), vehicleOptions(ctx.orgId)]);
   const values: Record<string, string> = {};

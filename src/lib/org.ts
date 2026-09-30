@@ -47,7 +47,7 @@ export async function requireCtx() {
   const membership = memberships.find((m) => m.organizationId === wanted) ?? memberships[0];
 
   return {
-    user: { id: user.id, name: user.name, email: user.email, image: user.image },
+    user: { id: user.id, name: user.name, email: user.email, image: user.image, totpEnabled: user.totpEnabled },
     org: membership.organization,
     orgId: membership.organizationId,
     role: membership.role,

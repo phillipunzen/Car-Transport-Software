@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Fahrzeuge" };
 
 export default async function VehiclesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { q } = await searchParams;
   const compact = q?.replace(/[\s-]/g, "");
   const vehicles = await db.vehicle.findMany({

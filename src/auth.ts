@@ -7,20 +7,31 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { createOrganizationForUser } from "@/lib/org";
+import { consumeRecoveryCode, verifyTotp } from "@/lib/totp";
 
 const providers: NextAuthConfig["providers"] = [
   Credentials({
     name: "E-Mail",
-    credentials: { email: {}, password: {} },
+    credentials: { email: {}, password: {}, code: {} },
     async authorize(raw) {
       const parsed = z
-        .object({ email: z.string().email(), password: z.string().min(1) })
+        .object({ email: z.string().email(), password: z.string().min(1), code: z.string().optional() })
         .safeParse(raw);
       if (!parsed.success) return null;
       const user = await db.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
       if (!user?.passwordHash) return null;
       const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
-      return ok ? { id: user.id, name: user.name, email: user.email, image: user.image } : null;
+      if (!ok) return null;
+      // Zwei-Faktor: Code aus der Authenticator-App oder ein Wiederherstellungscode
+      if (user.totpEnabled && user.totpSecret) {
+        const code = parsed.data.code?.trim() ?? "";
+        if (!verifyTotp(user.totpSecret, code)) {
+          const rest = consumeRecoveryCode(user.recoveryCodes, code);
+          if (!rest) return null;
+          await db.user.update({ where: { id: user.id }, data: { recoveryCodes: rest } });
+        }
+      }
+      return { id: user.id, name: user.name, email: user.email, image: user.image };
     },
   }),
 ];

@@ -10,13 +10,14 @@ import { DamageForm } from "@/components/damage-form";
 import { CarDiagram } from "@/components/car-diagram";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteDamage, deletePhoto } from "./actions";
+import { orderWhere } from "@/lib/permissions";
 
 export default async function ConditionPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ stage?: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const stage = (await searchParams).stage === "delivery" ? "DELIVERY" : "PICKUP";
   const order = await db.order.findFirst({
-    where: { id, organizationId: ctx.orgId },
+    where: orderWhere(ctx, { id }),
     include: {
       photos: { orderBy: { createdAt: "asc" } },
       damages: { orderBy: { createdAt: "asc" }, include: { photo: true } },

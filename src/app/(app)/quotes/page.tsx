@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type { QuoteStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate, formatMoney } from "@/lib/format";
 import { QUOTE_STATUS } from "@/lib/labels";
 import { Badge, Empty, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Angebote" };
 
 export default async function QuotesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { status } = await searchParams;
   const valid = status && QUOTE_STATUS[status] ? (status as QuoteStatus) : undefined;
   const [quotes, newInquiries] = await Promise.all([

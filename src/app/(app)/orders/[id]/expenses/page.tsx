@@ -10,12 +10,13 @@ import { Card } from "@/components/ui";
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { SubmitButton } from "@/components/submit-button";
 import { addExpense, addPerDiem, deleteExpense, updateExpense } from "./actions";
+import { orderWhere } from "@/lib/permissions";
 
 export default async function ExpensesPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const order = await db.order.findFirst({
-    where: { id, organizationId: ctx.orgId },
+    where: orderWhere(ctx, { id }),
     include: {
       expenses: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], include: { file: true } },
       protocols: { select: { type: true, performedAt: true } },

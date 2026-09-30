@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { nextNumber, requireCtx } from "@/lib/org";
+import { nextNumber } from "@/lib/org";
 import { decimal, str } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
 import type { FormState } from "@/components/action-form";
+import { requireOffice } from "@/lib/permissions";
 
 function customerData(formData: FormData) {
   const type = formData.get("type") === "PRIVATE" ? "PRIVATE" : "COMPANY";
@@ -48,7 +49,7 @@ function validate(data: ReturnType<typeof customerData>) {
 }
 
 export async function createCustomer(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const data = customerData(formData);
   const error = validate(data);
   if (error) return { error };
@@ -60,7 +61,7 @@ export async function createCustomer(_: FormState, formData: FormData): Promise<
 }
 
 export async function updateCustomer(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const id = String(formData.get("id"));
   const data = customerData(formData);
   const error = validate(data);
@@ -72,7 +73,7 @@ export async function updateCustomer(_: FormState, formData: FormData): Promise<
 }
 
 export async function deleteCustomer(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const id = String(formData.get("id"));
   const used = await db.order.count({ where: { customerId: id } }) + (await db.invoice.count({ where: { customerId: id } }));
   if (used > 0) throw new Error("Kunde hat Aufträge oder Rechnungen und kann nicht gelöscht werden.");

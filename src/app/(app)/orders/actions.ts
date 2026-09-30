@@ -11,6 +11,7 @@ import { recognitionMode, recognizeVehicle } from "@/lib/recognition";
 import { deleteFile, saveUpload } from "@/lib/files";
 import { syncVehicle } from "@/lib/vehicles";
 import { isSkippable, parseSkipped, type StepKey } from "@/lib/order-steps";
+import { isDriver } from "@/lib/permissions";
 
 const ORDER_STEP_LABELS: Record<StepKey, string> = {
   prepare: "Vorbereiten",
@@ -22,13 +23,14 @@ const ORDER_STEP_LABELS: Record<StepKey, string> = {
   payment: "Bezahlt",
 };
 import type { FormState } from "@/components/action-form";
+import { orderWhere } from "@/lib/permissions";
 
 export async function logEvent(orderId: string, ctx: Ctx, message: string) {
   await db.orderEvent.create({ data: { orderId, message, userName: ctx.user.name ?? ctx.user.email } });
 }
 
 async function requireOrder(ctx: Ctx, orderId: string) {
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
+  const order = await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) });
   if (!order) throw new Error("Auftrag nicht gefunden");
   return order;
 }
@@ -83,6 +85,7 @@ async function orderData(ctx: Ctx, formData: FormData) {
 
 export async function createOrder(_: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireCtx();
+  if (isDriver(ctx.role)) return { error: "Aufträge legt das Büro an." };
   const customerId = str(formData.get("customerId"));
   const customer = customerId ? await db.customer.findFirst({ where: { id: customerId, organizationId: ctx.orgId } }) : null;
   if (!customer) return { error: "Bitte wähle einen Kunden aus." };
@@ -114,11 +117,15 @@ export async function updateOrder(_: FormState, formData: FormData): Promise<For
   const ctx = await requireCtx();
   const id = String(formData.get("id"));
   const order = await requireOrder(ctx, id);
-  const customerId = str(formData.get("customerId"));
+  const driver = isDriver(ctx.role);
+  const customerId = driver ? order.customerId : str(formData.get("customerId"));
   const customer = customerId ? await db.customer.findFirst({ where: { id: customerId, organizationId: ctx.orgId } }) : null;
   if (!customer) return { error: "Bitte wähle einen Kunden aus." };
   try {
-    const data = await orderData(ctx, formData);
+    const parsed = await orderData(ctx, formData);
+    // Fahrer ändern weder Preise noch Zuweisung
+    const { pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId, ...rest } = parsed;
+    const data = driver ? rest : { ...rest, pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId };
     const vehicleId = await syncVehicle(ctx.orgId, customer.id, data, str(formData.get("vehicleId")) ?? order.vehicleId);
     await db.order.update({
       where: { id },

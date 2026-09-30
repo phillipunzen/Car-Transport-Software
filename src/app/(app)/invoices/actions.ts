@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireCtx, type Ctx } from "@/lib/org";
+import { type Ctx } from "@/lib/org";
 import { addressLines, decimal, formatDate, fromDateTimeLocal, orderNo, str, toNumber } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { computeTotals, type ItemInput } from "@/lib/invoice";
@@ -13,6 +13,7 @@ import type { FormState } from "@/components/action-form";
 import { logEvent } from "../orders/actions";
 import { effectiveConditions, transportItems } from "@/lib/pricing";
 import { DUNNING_LEVEL, MAX_DUNNING_LEVEL, dunningFee } from "@/lib/dunning";
+import { requireOffice } from "@/lib/permissions";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -43,7 +44,7 @@ async function createDraft(ctx: Ctx, customerId: string, items: ItemInput[], ord
 
 /** Erstellt aus einem Auftrag einen Rechnungsentwurf inkl. weiterberechneter Belege. */
 export async function createInvoiceFromOrder(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const order = await db.order.findFirst({
     where: { id: String(formData.get("orderId")), organizationId: ctx.orgId },
     include: {
@@ -88,7 +89,7 @@ export async function createInvoiceFromOrder(formData: FormData) {
 }
 
 export async function createInvoice(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const customerId = String(formData.get("customerId"));
   const vatRate = ctx.org.smallBusiness ? 0 : toNumber(ctx.org.defaultVatRate);
   const invoice = await createDraft(ctx, customerId, [{ description: "Fahrzeugüberführung", quantity: 1, unit: "Pausch.", unitPrice: 0, vatRate }], undefined, new Date());
@@ -112,7 +113,7 @@ async function draftFor(ctx: Ctx, id: string) {
 }
 
 export async function saveInvoice(_: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const invoice = await draftFor(ctx, String(formData.get("id")));
   if (invoice.status !== "DRAFT") return { error: "Festgeschriebene Rechnungen können nicht mehr geändert werden." };
 
@@ -208,7 +209,7 @@ async function issue(ctx: Ctx, id: string): Promise<FormState> {
 }
 
 export async function setPaid(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const invoice = await draftFor(ctx, String(formData.get("id")));
   const paid = formData.get("paid") === "1";
   if (invoice.status !== "ISSUED" && invoice.status !== "PAID") return;
@@ -221,7 +222,7 @@ export async function setPaid(formData: FormData) {
 
 /** Storniert eine festgeschriebene Rechnung durch eine Stornorechnung. */
 export async function cancelInvoice(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const invoice = await db.invoice.findFirst({
     where: { id: String(formData.get("id")), organizationId: ctx.orgId },
     include: { items: { orderBy: { position: "asc" } } },
@@ -265,7 +266,7 @@ export async function cancelInvoice(formData: FormData) {
 }
 
 export async function deleteDraft(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const invoice = await draftFor(ctx, String(formData.get("id")));
   if (invoice.status !== "DRAFT") throw new Error("Nur Entwürfe können gelöscht werden.");
   await db.invoice.delete({ where: { id: invoice.id } });
@@ -274,7 +275,7 @@ export async function deleteDraft(formData: FormData) {
 
 /** Nächste Mahnstufe anlegen (Zahlungserinnerung → 1. Mahnung → 2. Mahnung). */
 export async function createDunning(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const invoice = await db.invoice.findFirst({
     where: { id: String(formData.get("id")), organizationId: ctx.orgId },
     include: { dunnings: true },
@@ -294,7 +295,7 @@ export async function createDunning(formData: FormData) {
 
 /** Zuletzt erstellte Mahnstufe zurücknehmen (z. B. versehentlich angelegt). */
 export async function deleteDunning(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const dunning = await db.dunning.findFirst({
     where: { id: String(formData.get("dunningId")), invoice: { organizationId: ctx.orgId } },
     include: { invoice: { include: { dunnings: true } } },

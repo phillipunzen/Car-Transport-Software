@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate, formatMoney, orderNo, toDateTimeLocal, toNumber } from "@/lib/format";
 import { INVOICE_STATUS } from "@/lib/labels";
 import { computeTotals } from "@/lib/invoice";
@@ -13,9 +13,10 @@ import { EmailDocuments } from "@/components/email-documents";
 import { emailDocumentsProps } from "@/lib/email-docs";
 import { cancelInvoice, createDunning, deleteDraft, deleteDunning, setPaid } from "../actions";
 import { DUNNING_LEVEL, MAX_DUNNING_LEVEL, dunningFee } from "@/lib/dunning";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const invoice = await db.invoice.findFirst({
     where: { id, organizationId: ctx.orgId },

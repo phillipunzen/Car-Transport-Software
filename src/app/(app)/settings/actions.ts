@@ -104,7 +104,7 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
 
 const InviteSchema = z.object({
   email: z.string().trim().toLowerCase().email("Bitte eine gültige E-Mail-Adresse angeben."),
-  role: z.enum(["ADMIN", "MEMBER"]),
+  role: z.enum(["ADMIN", "MEMBER", "DRIVER"]),
 });
 
 export async function inviteMember(_: FormState, formData: FormData): Promise<FormState> {

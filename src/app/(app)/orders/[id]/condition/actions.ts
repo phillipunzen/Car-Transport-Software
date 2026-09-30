@@ -8,12 +8,13 @@ import { deleteFile, saveUpload } from "@/lib/files";
 import { DAMAGE_AREAS, DAMAGE_SEVERITY, DAMAGE_TYPES, PHOTO_CATEGORIES } from "@/lib/labels";
 import { str } from "@/lib/format";
 import { logEvent } from "../../actions";
+import { orderWhere } from "@/lib/permissions";
 
 const stageOf = (v: FormDataEntryValue | null): Stage => (v === "DELIVERY" ? "DELIVERY" : "PICKUP");
 
 async function orderFor(orderId: string) {
   const ctx = await requireCtx();
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
+  const order = await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) });
   if (!order) throw new Error("Auftrag nicht gefunden");
   return { ctx, order };
 }

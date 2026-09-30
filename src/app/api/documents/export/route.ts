@@ -52,8 +52,10 @@ export async function GET(req: Request) {
     .find((c) => c.startsWith(`${ACTIVE_ORG_COOKIE}=`))
     ?.split("=")[1];
   const memberships = await db.membership.findMany({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } });
-  const orgId = memberships.find((m) => m.organizationId === cookieOrg)?.organizationId ?? memberships[0]?.organizationId;
-  if (!orgId) return new NextResponse("Not found", { status: 404 });
+  const member = memberships.find((m) => m.organizationId === cookieOrg) ?? memberships[0];
+  const orgId = member?.organizationId;
+  // Belegarchiv ist Büro-Bereich
+  if (!orgId || member.role === "DRIVER") return new NextResponse("Not found", { status: 404 });
 
   const url = new URL(req.url);
   const filters = parseFilters(Object.fromEntries(url.searchParams));

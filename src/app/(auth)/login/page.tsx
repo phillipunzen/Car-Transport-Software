@@ -1,8 +1,5 @@
 import Link from "next/link";
-import { ActionForm } from "@/components/action-form";
-import { SubmitButton } from "@/components/submit-button";
-import { Field } from "@/components/ui";
-import { loginAction } from "../actions";
+import { LoginForm } from "./login-form";
 import { SocialButtons } from "../social-buttons";
 
 export const metadata = { title: "Anmelden" };
@@ -18,14 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
       )}
       <SocialButtons callbackUrl={callbackUrl} />
-      <ActionForm action={loginAction}>
-        <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
-        <Field label="E-Mail" name="email" type="email" autoComplete="email" required />
-        <Field label="Passwort" name="password" type="password" autoComplete="current-password" required />
-        <SubmitButton className="btn-primary w-full" pendingText="Anmelden…">
-          Anmelden
-        </SubmitButton>
-      </ActionForm>
+      <LoginForm callbackUrl={callbackUrl} />
       <p className="text-center text-sm text-slate-500">
         Noch kein Konto?{" "}
         <Link href={`/register${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`} className="font-medium text-brand-600">

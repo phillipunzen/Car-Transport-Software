@@ -10,7 +10,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
   const { id } = await params;
   const dunning = await db.dunning.findUnique({ where: { id }, select: { invoice: { select: { organizationId: true } } } });
-  const orgId = await memberOrgFor(session.user.id, dunning?.invoice.organizationId);
+  const orgId = await memberOrgFor(session.user.id, dunning?.invoice.organizationId, { office: true });
   if (!orgId) return new NextResponse("Not found", { status: 404 });
   const result = await dunningPdf(orgId, id);
   if (!result) return new NextResponse("Not found", { status: 404 });

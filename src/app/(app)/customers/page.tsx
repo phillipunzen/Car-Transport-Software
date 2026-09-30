@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, customerNo } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
+import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Kunden" };
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { q } = await searchParams;
   const customers = await db.customer.findMany({
     where: {

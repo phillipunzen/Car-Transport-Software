@@ -2,6 +2,7 @@ import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { customerName, toDateTimeLocal } from "@/lib/format";
 import { effectiveConditions } from "@/lib/pricing";
+import { orderWhere } from "@/lib/permissions";
 
 export async function customerOptions(orgId: string) {
   const [customers, org] = await Promise.all([
@@ -36,9 +37,9 @@ export function orderToFormValues(o: Order): Record<string, string> {
   return out;
 }
 
-export async function getOrder(orgId: string, id: string) {
+export async function getOrder(ctx: Parameters<typeof orderWhere>[0], id: string) {
   return db.order.findFirst({
-    where: { id, organizationId: orgId },
+    where: orderWhere(ctx, { id }),
     include: { customer: true, assignedTo: true },
   });
 }

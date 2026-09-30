@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { formatDate, formatDateTime } from "@/lib/format";
 import { INQUIRY_STATUS, TRANSPORT_MODE } from "@/lib/labels";
 import { Badge, Card, Dl, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteInquiry, inquiryToOrder, inquiryToQuote, setInquiryStatus } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function InquiryPage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const i = await db.inquiry.findFirst({ where: { id, organizationId: ctx.orgId }, include: { quote: true, order: true } });
   if (!i) notFound();

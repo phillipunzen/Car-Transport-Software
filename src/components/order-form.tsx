@@ -54,6 +54,7 @@ export function OrderForm({
   mode = "order",
   quoteId,
   hidden,
+  restricted = false,
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
@@ -68,6 +69,8 @@ export function OrderForm({
   quoteId?: string;
   /** Zusätzliche versteckte Felder (z. B. Bezug zu einer Anfrage) */
   hidden?: Record<string, string>;
+  /** Fahrer: ohne Kundenwechsel, Fahrerzuweisung und Preise */
+  restricted?: boolean;
 }) {
   const isQuote = mode === "quote";
   const recordId = orderId ?? quoteId;
@@ -81,6 +84,8 @@ export function OrderForm({
   const draftKey = `${mode}-draft:${recordId ?? "new"}`;
   const [restored, setRestored] = useState(false);
   const skipSave = useRef(true);
+  // Nach dem Absenden denselben Stand nicht erneut als Entwurf ablegen (sonst taucht er im nächsten neuen Auftrag auf)
+  const submittedState = useRef<string | null>(null);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(draftKey);
@@ -102,6 +107,7 @@ export function OrderForm({
     }
     const t = setTimeout(() => {
       try {
+        if (submittedState.current === JSON.stringify(v)) return;
         localStorage.setItem(draftKey, JSON.stringify(v));
       } catch {
         /* ignorieren */
@@ -251,6 +257,7 @@ export function OrderForm({
       action={action}
       className="space-y-6"
       onSubmitStart={() => {
+        submittedState.current = JSON.stringify(v);
         try {
           localStorage.removeItem(draftKey);
         } catch {
@@ -285,6 +292,13 @@ export function OrderForm({
       <section className="card card-body space-y-4">
         <h2 className="section-title">{isQuote ? "Angebot für" : "Auftrag"}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
+          {restricted ? (
+            <div className="sm:col-span-2">
+              <label>Kunde</label>
+              <p className="mt-1 text-sm font-medium">{customer?.displayName ?? "–"}</p>
+              <input type="hidden" name="customerId" value={v.customerId ?? ""} />
+            </div>
+          ) : (
           <div className="sm:col-span-2">
             <label htmlFor="customerId">
               Kunde <span className="text-red-500">*</span>
@@ -305,6 +319,7 @@ export function OrderForm({
               )}
             </div>
           </div>
+          )}
           <div>
             <label htmlFor="transportMode">Überführungsart</label>
             <select id="transportMode" name="transportMode" value={v.transportMode} onChange={(e) => set("transportMode", e.target.value)} className="input">
@@ -316,7 +331,7 @@ export function OrderForm({
             </select>
           </div>
           {!isQuote && input("reference", "Referenz / Bestellnr. des Kunden")}
-          <div className={isQuote ? "hidden" : "sm:col-span-2"}>
+          <div className={isQuote || restricted ? "hidden" : "sm:col-span-2"}>
             <label htmlFor="assignedToId">Fahrer</label>
             <select id="assignedToId" name="assignedToId" value={v.assignedToId ?? ""} onChange={(e) => set("assignedToId", e.target.value)} className="input">
               <option value="">Nicht zugewiesen</option>
@@ -388,7 +403,7 @@ export function OrderForm({
       </section>
 
       <section className="card card-body space-y-4">
-        <h2 className="section-title">Strecke & Preis</h2>
+        <h2 className="section-title">{restricted ? "Strecke" : "Strecke & Preis"}</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor="distanceKm">Entfernung (km)</label>
@@ -424,6 +439,7 @@ export function OrderForm({
               <p className="mt-1 text-xs text-slate-500">Wird aus den Adressen automatisch berechnet.</p>
             ) : null}
           </div>
+          {!restricted && (
           <div>
             <label htmlFor="pricingType">Abrechnung</label>
             <select id="pricingType" name="pricingType" value={v.pricingType} onChange={(e) => set("pricingType", e.target.value)} className="input">
@@ -431,11 +447,13 @@ export function OrderForm({
               <option value="PER_KM">Nach Kilometern</option>
             </select>
           </div>
-          {v.pricingType === "FLAT"
-            ? input("price", "Pauschale netto (€)", { inputMode: "decimal" })
-            : input("pricePerKm", "Preis je km netto (€)", { inputMode: "decimal" })}
+          )}
+          {!restricted &&
+            (v.pricingType === "FLAT"
+              ? input("price", "Pauschale netto (€)", { inputMode: "decimal" })
+              : input("pricePerKm", "Preis je km netto (€)", { inputMode: "decimal" }))}
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className={restricted ? "hidden" : "grid gap-4 sm:grid-cols-3"}>
           <div>
             <label htmlFor="returnType">Rückreise des Fahrers</label>
             <select id="returnType" name="returnType" value={v.returnType ?? "NONE"} onChange={(e) => set("returnType", e.target.value)} className="input">
@@ -452,7 +470,7 @@ export function OrderForm({
             <p className="self-end pb-2 text-xs text-slate-500 sm:col-span-2">Bahn-, Bus- und Taxibelege werden im Auftrag unter „Belege“ erfasst und weiterberechnet.</p>
           )}
         </div>
-        {total > 0 && (
+        {total > 0 && !restricted && (
           <p className="text-sm text-slate-600">
             Auftragswert: <strong>{total.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</strong> netto
             {returnTotal > 0 && ` (davon Rückreise ${returnTotal.toLocaleString("de-DE", { style: "currency", currency: "EUR" })})`}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireCtx } from "@/lib/org";
+
 import { customerName, formatDate, formatMoney, formatNumber, orderNo, toDateInput, toNumber } from "@/lib/format";
 import { QUOTE_STATUS, RETURN_TYPE, TRANSPORT_MODE } from "@/lib/labels";
 import { mailEnabled } from "@/lib/mail";
@@ -10,9 +10,10 @@ import { InvoiceEditor } from "@/components/invoice-editor";
 import { EmailDocuments } from "@/components/email-documents";
 import { SubmitButton } from "@/components/submit-button";
 import { acceptQuote, deleteQuote, saveQuote, setQuoteStatus } from "../actions";
+import { requireOffice } from "@/lib/permissions";
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const { id } = await params;
   const quote = await db.quote.findFirst({
     where: { id, organizationId: ctx.orgId },

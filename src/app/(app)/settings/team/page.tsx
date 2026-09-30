@@ -1,7 +1,8 @@
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
 import { formatDate } from "@/lib/format";
-import { ROLE } from "@/lib/labels";
+import { ROLE, ROLE_HINT } from "@/lib/labels";
 import { appUrl, mailEnabled } from "@/lib/mail";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -13,6 +14,7 @@ export const metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const ctx = await requireCtx();
+  if (ctx.role === "DRIVER") redirect("/settings/security");
   const manager = canManage(ctx.role);
   const [members, invitations] = await Promise.all([
     db.membership.findMany({ where: { organizationId: ctx.orgId }, include: { user: true }, orderBy: { createdAt: "asc" } }),
@@ -22,7 +24,7 @@ export default async function TeamPage() {
   return (
     <>
       <PageHeader title="Einstellungen" subtitle="Lade Kolleginnen und Kollegen in deine Instanz ein, um gemeinsam zu arbeiten." />
-      <SettingsNav active="team" />
+      <SettingsNav active="team" fleet={ctx.org.moduleFleet} />
       <div className="grid gap-6 lg:grid-cols-5">
         <Card title={`Mitglieder (${members.length})`} className="lg:col-span-3">
           <ul className="-my-3 divide-y divide-slate-100">
@@ -68,6 +70,17 @@ export default async function TeamPage() {
 
         <div className="space-y-6 lg:col-span-2">
           {manager && (
+            <Card title="Rollen">
+              <ul className="space-y-1 text-sm text-slate-600">
+                {Object.entries(ROLE).map(([k, v]) => (
+                  <li key={k}>
+                    <strong>{v}:</strong> {ROLE_HINT[k]}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {manager && (
             <Card title="Person einladen">
               <ActionForm action={inviteMember} resetOnSuccess>
                 <div>
@@ -77,7 +90,8 @@ export default async function TeamPage() {
                 <div>
                   <label htmlFor="role">Rolle</label>
                   <select id="role" name="role" className="input" defaultValue="MEMBER">
-                    <option value="MEMBER">Mitarbeiter – Aufträge, Protokolle, Belege</option>
+                    <option value="DRIVER">Fahrer – nur eigene Touren, ohne Preise & Rechnungen</option>
+                    <option value="MEMBER">Mitarbeiter (Büro) – Aufträge, Kunden, Angebote, Rechnungen</option>
                     <option value="ADMIN">Administrator – zusätzlich Einstellungen & Team</option>
                   </select>
                 </div>

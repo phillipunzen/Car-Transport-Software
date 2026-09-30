@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { EmailDocuments } from "@/components/email-documents";
 import { emailDocumentsProps } from "@/lib/email-docs";
 import { reopenProtocol } from "../actions";
+import { orderWhere } from "@/lib/permissions";
 
 export default async function ProtocolPage({ params }: { params: Promise<{ id: string; type: string }> }) {
   const ctx = await requireCtx();
@@ -17,7 +18,7 @@ export default async function ProtocolPage({ params }: { params: Promise<{ id: s
   if (rawType !== "pickup" && rawType !== "delivery") notFound();
   const type = rawType === "pickup" ? "PICKUP" : "DELIVERY";
   const order = await db.order.findFirst({
-    where: { id, organizationId: ctx.orgId },
+    where: orderWhere(ctx, { id }),
     include: { customer: true, protocols: true, damages: { where: { stage: type } }, _count: { select: { photos: { where: { stage: type } } } } },
   });
   if (!order) notFound();

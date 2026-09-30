@@ -9,6 +9,7 @@ import { CHECKLIST_ITEMS } from "@/lib/labels";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../../actions";
 import { notifyCustomerStatus } from "@/lib/tracking";
+import { orderWhere } from "@/lib/permissions";
 
 const isSignature = (v: string | null) => (v && v.startsWith("data:image/png;base64,") && v.length < 2_000_000 ? v : null);
 
@@ -16,7 +17,7 @@ export async function saveProtocol(_: FormState, formData: FormData): Promise<Fo
   const ctx = await requireCtx();
   const orderId = String(formData.get("orderId"));
   const type: Stage = formData.get("type") === "DELIVERY" ? "DELIVERY" : "PICKUP";
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
+  const order = await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) });
   if (!order) return { error: "Auftrag nicht gefunden." };
   const existing = await db.protocol.findUnique({ where: { orderId_type: { orderId, type } } });
   if (existing?.completedAt) return { error: "Das Protokoll ist bereits abgeschlossen." };
@@ -79,7 +80,7 @@ export async function reopenProtocol(formData: FormData) {
   if (!canManage(ctx.role)) throw new Error("Nur Administratoren können Protokolle wieder öffnen.");
   const orderId = String(formData.get("orderId"));
   const type: Stage = formData.get("type") === "DELIVERY" ? "DELIVERY" : "PICKUP";
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
+  const order = await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) });
   if (!order) return;
   await db.protocol.update({ where: { orderId_type: { orderId, type } }, data: { completedAt: null } });
   await logEvent(orderId, ctx, `${type === "PICKUP" ? "Abholprotokoll" : "Übergabeprotokoll"} wieder geöffnet`);

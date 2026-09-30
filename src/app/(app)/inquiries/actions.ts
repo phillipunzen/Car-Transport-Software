@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { nextNumber, requireCtx, type Ctx } from "@/lib/org";
+import { nextNumber, type Ctx } from "@/lib/org";
 import { syncVehicle } from "@/lib/vehicles";
 import { fromDateTimeLocal } from "@/lib/format";
 import { logEvent } from "../orders/actions";
+import { requireOffice } from "@/lib/permissions";
 
 async function requireInquiry(ctx: Ctx, id: string) {
   const inquiry = await db.inquiry.findFirst({ where: { id, organizationId: ctx.orgId } });
@@ -36,7 +37,7 @@ async function customerFor(ctx: Ctx, inquiry: Awaited<ReturnType<typeof requireI
 
 /** Weiter zum Angebot (Eckdaten werden im Angebotsformular vorbelegt). */
 export async function inquiryToQuote(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const inquiry = await requireInquiry(ctx, String(formData.get("id")));
   if (inquiry.quoteId) redirect(`/quotes/${inquiry.quoteId}`);
   const customer = await customerFor(ctx, inquiry);
@@ -45,7 +46,7 @@ export async function inquiryToQuote(formData: FormData) {
 
 /** Direkt als Auftrag übernehmen (ohne Angebot). */
 export async function inquiryToOrder(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const inquiry = await requireInquiry(ctx, String(formData.get("id")));
   if (inquiry.orderId) redirect(`/orders/${inquiry.orderId}`);
   const customer = await customerFor(ctx, inquiry);
@@ -89,7 +90,7 @@ export async function inquiryToOrder(formData: FormData) {
 }
 
 export async function setInquiryStatus(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const inquiry = await requireInquiry(ctx, String(formData.get("id")));
   const status = formData.get("status") === "REJECTED" ? "REJECTED" : "NEW";
   await db.inquiry.update({ where: { id: inquiry.id }, data: { status } });
@@ -98,7 +99,7 @@ export async function setInquiryStatus(formData: FormData) {
 }
 
 export async function deleteInquiry(formData: FormData) {
-  const ctx = await requireCtx();
+  const ctx = await requireOffice();
   const inquiry = await requireInquiry(ctx, String(formData.get("id")));
   await db.inquiry.delete({ where: { id: inquiry.id } });
   redirect("/inquiries");

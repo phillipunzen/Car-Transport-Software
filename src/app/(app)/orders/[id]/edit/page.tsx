@@ -5,16 +5,19 @@ import { recognitionMode } from "@/lib/recognition";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
 import { OrderForm } from "@/components/order-form";
+import { isDriver } from "@/lib/permissions";
 import { updateOrder } from "../../actions";
 
 export default async function EditOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const { saved } = await searchParams;
-  const order = await getOrder(ctx.orgId, id);
+  const order = await getOrder(ctx, id);
   if (!order) notFound();
   const [customers, members, vehicles] = await Promise.all([customerOptions(ctx.orgId), memberOptions(ctx.orgId), vehicleOptions(ctx.orgId)]);
+  const driver = isDriver(ctx.role);
   const values = orderToFormValues(order);
+  if (driver) for (const k of ["price", "pricePerKm", "returnFlat", "returnPerKm", "driverPay", "feedbackComment"]) delete values[k];
   if (values.distanceKm) values.distanceKm = values.distanceKm.replace(".", ",");
   return (
     <>
@@ -25,11 +28,13 @@ export default async function EditOrderPage({ params, searchParams }: { params: 
       )}
       <OrderForm
         action={updateOrder}
-        customers={customers}
+        // Fahrer bekommen keine Kundenliste/Konditionen und keinen Fahrzeugbestand
+        customers={driver ? customers.filter((c) => c.id === order.customerId).map((c) => ({ ...c, conditions: { ...c.conditions, pricePerKm: null, returnFlat: null, returnPerKm: null } })) : customers}
         members={members}
-        vehicles={vehicles}
+        vehicles={driver ? [] : vehicles}
         values={values}
         orderId={order.id}
+        restricted={driver}
         recognition={recognitionMode()}
         geo={geoEnabled()}
       />

@@ -15,27 +15,41 @@ const ICONS: Record<string, React.ReactNode> = {
   today: <path d="M12 2a1 1 0 0 1 1 1v1.1a8 8 0 0 1 6.9 6.9H21a1 1 0 1 1 0 2h-1.1a8 8 0 0 1-6.9 6.9V21a1 1 0 1 1-2 0v-1.1A8 8 0 0 1 4.1 13H3a1 1 0 1 1 0-2h1.1A8 8 0 0 1 11 4.1V3a1 1 0 0 1 1-1m0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12m0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6" />,
   calendar: <path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1M5 10v9h14v-9zm2 2h4v3H7z" />,
   more: <path d="M5 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4m7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4m7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4" />,
+  reports: <path d="M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7zM3 21h18v1H3z" />,
+  pay: <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm2 2v2h14V8zm0 5v5h14v-5zm2 1h5v2H7z" />,
   settings: <path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.9a7 7 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7" />,
 };
 
-export const NAV = [
-  { href: "/dashboard", label: "Übersicht", icon: "dashboard" },
-  { href: "/today", label: "Heute", icon: "today" },
-  { href: "/calendar", label: "Kalender", icon: "calendar" },
-  { href: "/orders", label: "Aufträge", icon: "orders" },
-  { href: "/quotes", label: "Angebote", icon: "quotes" },
-  { href: "/vehicles", label: "Fahrzeuge", icon: "vehicles" },
-  { href: "/customers", label: "Kunden", icon: "customers" },
-  { href: "/invoices", label: "Rechnungen", icon: "invoices" },
-  { href: "/documents", label: "Belege", icon: "documents" },
-  { href: "/settings", label: "Einstellungen", icon: "settings" },
+type NavItem = { href: string; label: string; icon: string; group: "go" | "office" | "settings" };
+
+const ALL: (NavItem & { office?: boolean; module?: "driverPay" })[] = [
+  { href: "/dashboard", label: "Übersicht", icon: "dashboard", group: "go", office: true },
+  { href: "/today", label: "Heute", icon: "today", group: "go" },
+  { href: "/calendar", label: "Kalender", icon: "calendar", group: "go" },
+  { href: "/orders", label: "Aufträge", icon: "orders", group: "go" },
+  { href: "/quotes", label: "Angebote", icon: "quotes", group: "office", office: true },
+  { href: "/customers", label: "Kunden", icon: "customers", group: "office", office: true },
+  { href: "/vehicles", label: "Fahrzeuge", icon: "vehicles", group: "office", office: true },
+  { href: "/invoices", label: "Rechnungen", icon: "invoices", group: "office", office: true },
+  { href: "/documents", label: "Belege", icon: "documents", group: "office", office: true },
+  { href: "/reports", label: "Auswertungen", icon: "reports", group: "office", office: true },
+  { href: "/drivers", label: "Fahrer-Abrechnung", icon: "pay", group: "office", office: true, module: "driverPay" },
+  { href: "/settings", label: "Einstellungen", icon: "settings", group: "settings" },
 ];
 
-/** Smartphone: die vier wichtigsten Ziele für unterwegs direkt, der Rest unter „Mehr“. */
-const MOBILE_PRIMARY = ["/today", "/orders", "/calendar", "/customers"];
-const MOBILE_NAV = NAV.filter((n) => MOBILE_PRIMARY.includes(n.href));
-const MOBILE_MORE = NAV.filter((n) => !MOBILE_PRIMARY.includes(n.href));
-const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`) || (href === "/quotes" && path.startsWith("/inquiries"));
+export type NavOptions = { driver: boolean; driverPay: boolean };
+
+export function navItems({ driver, driverPay }: NavOptions): NavItem[] {
+  return ALL.filter((i) => (!i.office || !driver) && (i.module !== "driverPay" || driverPay)).map((i) =>
+    driver && i.href === "/settings" ? { ...i, label: "Profil & Sicherheit" } : i,
+  );
+}
+
+const isActive = (path: string, href: string) =>
+  path === href ||
+  path.startsWith(`${href}/`) ||
+  (href === "/quotes" && path.startsWith("/inquiries")) ||
+  (href === "/invoices" && path.startsWith("/bank"));
 
 export function SettingsIconLink() {
   const path = usePathname();
@@ -54,32 +68,46 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-export function SideNav() {
+const GROUP_TITLE: Record<string, string | null> = { go: null, office: "Büro", settings: null };
+
+export function SideNav(opts: NavOptions) {
   const path = usePathname();
+  const items = navItems(opts);
+  const groups = (["go", "office", "settings"] as const).map((g) => ({ g, items: items.filter((i) => i.group === g) })).filter((x) => x.items.length);
   return (
-    <nav className="space-y-1">
-      {NAV.map((item) => {
-        const active = isActive(path, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <Icon name={item.icon} />
-            {item.label}
-          </Link>
-        );
-      })}
+    <nav className="space-y-4">
+      {groups.map(({ g, items: list }) => (
+        <div key={g} className="space-y-1">
+          {GROUP_TITLE[g] && <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{GROUP_TITLE[g]}</p>}
+          {list.map((item) => {
+            const active = isActive(path, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                <Icon name={item.icon} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
 
-export function BottomNav() {
+/** Smartphone: die wichtigsten Ziele für unterwegs direkt, der Rest unter „Mehr“. */
+export function BottomNav(opts: NavOptions) {
   const path = usePathname();
   const [more, setMore] = useState(false);
+  const items = navItems(opts);
+  const primary = opts.driver ? ["/today", "/calendar", "/orders", "/settings"] : ["/today", "/calendar", "/orders", "/customers"];
+  const MOBILE_NAV = primary.map((h) => items.find((i) => i.href === h)!).filter(Boolean);
+  const MOBILE_MORE = opts.driver ? [] : items.filter((i) => !primary.includes(i.href));
   const moreActive = MOBILE_MORE.some((item) => isActive(path, item.href));
   // Nach dem Navigieren das Menü schließen
   useEffect(() => setMore(false), [path]);
@@ -111,7 +139,7 @@ export function BottomNav() {
         </div>
       )}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-        <div className="grid grid-cols-5">
+        <div className={`grid ${MOBILE_MORE.length ? "grid-cols-5" : "grid-cols-4"}`}>
           {MOBILE_NAV.map((item) => {
             const active = isActive(path, item.href) && !more;
             return (
@@ -121,10 +149,11 @@ export function BottomNav() {
                 className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${active ? "text-brand-600" : "text-slate-500"}`}
               >
                 <Icon name={item.icon} />
-                {item.label}
+                {opts.driver && item.href === "/settings" ? "Profil" : item.label}
               </Link>
             );
           })}
+          {MOBILE_MORE.length > 0 && (
           <button
             type="button"
             onClick={() => setMore((m) => !m)}
@@ -134,6 +163,7 @@ export function BottomNav() {
             <Icon name="more" />
             Mehr
           </button>
+          )}
         </div>
       </nav>
     </>

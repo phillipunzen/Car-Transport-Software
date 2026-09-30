@@ -23,6 +23,7 @@ function OrgSwitcher({ current, memberships }: { current: string; memberships: {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireCtx();
+  const navOpts = { driver: ctx.role === "DRIVER", driverPay: ctx.org.moduleDriverPay };
   const logoUrl = ctx.org.logoFileId ? `/api/files/${ctx.org.logoFileId}` : null;
   return (
     <div className="min-h-dvh lg:flex">
@@ -46,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <OrgSwitcher current={ctx.orgId} memberships={ctx.memberships} />
           </div>
         </div>
-        <SideNav />
+        <SideNav {...navOpts} />
         <div className="mt-auto border-t border-slate-100 px-2 pt-4">
           <p className="truncate text-sm font-medium">{ctx.user.name ?? ctx.user.email}</p>
           <p className="truncate text-xs text-slate-500">{ctx.user.email}</p>
@@ -73,9 +74,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <main className="min-w-0 flex-1 px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-10">
         <SyncStatus />
+        {ctx.org.require2fa && (ctx.role === "OWNER" || ctx.role === "ADMIN") && !ctx.user.totpEnabled && (
+          <div className="mx-auto mb-4 max-w-6xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            🔐 In deiner Firma ist die Zwei-Faktor-Anmeldung für Administratoren vorgeschrieben.{" "}
+            <Link href="/settings/security" className="font-semibold underline">
+              Jetzt einrichten
+            </Link>
+          </div>
+        )}
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
-      <BottomNav />
+      <BottomNav {...navOpts} />
     </div>
   );
 }

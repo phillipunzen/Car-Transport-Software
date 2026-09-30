@@ -8,6 +8,7 @@ import { mailEnabled, sendMailWith } from "@/lib/mail";
 import { damageReportPdf, dunningPdf, invoicePdf, invoiceXml, protocolPdf, quotePdf } from "@/lib/pdf/load";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "./actions";
+import { orderWhere } from "@/lib/permissions";
 
 const emailList = z
   .string()
@@ -37,7 +38,7 @@ export async function sendDocumentsEmail(_: FormState, formData: FormData): Prom
 
   const orderId = String(formData.get("orderId") ?? "") || null;
   const invoiceId = String(formData.get("invoiceId") ?? "") || null;
-  if (orderId && !(await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } }))) return { error: "Auftrag nicht gefunden." };
+  if (orderId && !(await db.order.findFirst({ where: orderWhere(ctx, { id: orderId }) }))) return { error: "Auftrag nicht gefunden." };
 
   const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
   const names: string[] = [];
