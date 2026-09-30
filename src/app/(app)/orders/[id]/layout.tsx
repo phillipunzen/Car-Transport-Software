@@ -20,6 +20,7 @@ export default async function OrderLayout({ children, params }: { children: Reac
       quote: { select: { id: true, number: true } },
       protocols: { select: { type: true, completedAt: true } },
       invoices: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, take: 1 },
+      collectiveInvoice: true,
       _count: { select: { photos: true, damages: true, expenses: true } },
     },
   });
@@ -35,7 +36,8 @@ export default async function OrderLayout({ children, params }: { children: Reac
     const p = order.protocols.find((x) => x.type === type);
     return p?.completedAt ? "done" : p ? "draft" : "none";
   };
-  const invoice = order.invoices[0] ?? null;
+  const collective = order.collectiveInvoice && order.collectiveInvoice.status !== "CANCELLED" ? order.collectiveInvoice : null;
+  const invoice = order.invoices[0] ?? collective;
   const input: OrderStepInput = {
     ...order,
     price: order.pricingType === "PER_KM" ? toNumber(order.distanceKm) * toNumber(order.pricePerKm) : toNumber(order.price),

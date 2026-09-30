@@ -62,9 +62,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         title={driver ? "Meine Aufträge" : "Aufträge"}
         actions={
           !driver && (
-            <Link href="/orders/new" className="btn-primary">
-              + Neuer Auftrag
-            </Link>
+            <>
+              <Link href="/orders/templates" className="btn-secondary">
+                Vorlagen
+              </Link>
+              <Link href="/orders/new" className="btn-primary">
+                + Neuer Auftrag
+              </Link>
+            </>
           )
         }
       />

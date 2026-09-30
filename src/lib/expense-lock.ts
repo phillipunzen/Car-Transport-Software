@@ -11,7 +11,7 @@ export type ExpenseLock = {
 /** Belegschutz (GoBD): Nach dem Festschreiben einer Rechnung dürfen die zugrunde liegenden Belege nicht mehr verändert werden. */
 export async function expenseLock(orderId: string): Promise<ExpenseLock> {
   const invoices = await db.invoice.findMany({
-    where: { orderId, status: { not: "DRAFT" } },
+    where: { OR: [{ orderId }, { collectiveOrders: { some: { id: orderId } } }], status: { not: "DRAFT" } },
     select: { status: true, number: true, correctsNumber: true },
   });
   const active = invoices.find((i) => !i.correctsNumber && (i.status === "ISSUED" || i.status === "PAID"));

@@ -3,6 +3,7 @@ import { returnCost } from "@/lib/pricing";
 import { trackingUrl } from "@/lib/tracking";
 import { TrackingLink } from "@/components/tracking-link";
 import { MoreSection } from "@/components/more-section";
+import { saveAsTemplate } from "../templates/actions";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
@@ -54,6 +55,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       protocols: true,
       expenses: true,
       invoices: { orderBy: { createdAt: "desc" } },
+      collectiveInvoice: true,
       events: { orderBy: { createdAt: "desc" }, take: 20 },
       _count: { select: { damages: { where: { stage: "DELIVERY" } } } },
     },
@@ -181,10 +183,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             />
           </Card>
         )}
-        {!driver && order.invoices.length > 0 && (
+        {!driver && (order.invoices.length > 0 || order.collectiveInvoice) && (
           <Card title="Rechnungen">
             <ul className="space-y-2">
-              {order.invoices.map((i) => (
+              {[...order.invoices, ...(order.collectiveInvoice ? [order.collectiveInvoice] : [])].map((i) => (
                 <li key={i.id}>
                   <Link href={`/invoices/${i.id}`} className="flex items-center justify-between text-sm hover:text-brand-600">
                     <span>
@@ -212,6 +214,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </ol>
         </Card>
 
+        {!driver && (
+          <Card title="Weitere Aktionen">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link href={`/orders/new?copyFrom=${order.id}`} className="btn-secondary">
+                Auftrag kopieren
+              </Link>
+              <form action={saveAsTemplate}>
+                <input type="hidden" name="orderId" value={order.id} />
+                <SubmitButton className="btn-secondary w-full">Als Vorlage speichern</SubmitButton>
+              </form>
+            </div>
+          </Card>
+        )}
         <Card title="Status manuell ändern">
           <form action={setOrderStatus} className="flex gap-2">
             <input type="hidden" name="id" value={order.id} />

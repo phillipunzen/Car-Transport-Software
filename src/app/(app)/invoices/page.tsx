@@ -62,6 +62,18 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             <SubmitButton className="btn-primary shrink-0">+ Freie Rechnung</SubmitButton>
           </form>
         )}
+        {customers.length > 0 && (
+          <div className="flex gap-2">
+            <Link href="/invoices/collective" className="btn-secondary">
+              Sammelrechnung
+            </Link>
+            {ctx.org.moduleBankImport && (
+              <Link href="/bank" className="btn-secondary">
+                Zahlungsabgleich
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       {invoices.length === 0 ? (

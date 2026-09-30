@@ -172,7 +172,7 @@ export async function deleteOrder(formData: FormData) {
     include: { photos: true, expenses: true, invoices: { where: { status: { not: "DRAFT" } } } },
   });
   if (!order) return;
-  if (order.invoices.length) throw new Error("Aufträge mit festgeschriebenen Rechnungen können nicht gelöscht werden.");
+  if (order.invoices.length || order.collectiveInvoiceId) throw new Error("Aufträge mit Rechnungen können nicht gelöscht werden.");
   const fileIds = [...order.photos.map((p) => p.fileId), ...order.expenses.map((e) => e.fileId).filter((f): f is string => !!f)];
   await db.invoice.deleteMany({ where: { orderId: id, status: "DRAFT" } });
   await db.order.delete({ where: { id } });

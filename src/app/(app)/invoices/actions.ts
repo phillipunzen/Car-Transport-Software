@@ -42,23 +42,23 @@ async function createDraft(ctx: Ctx, customerId: string, items: ItemInput[], ord
   });
 }
 
-/** Erstellt aus einem Auftrag einen Rechnungsentwurf inkl. weiterberechneter Belege. */
-export async function createInvoiceFromOrder(formData: FormData) {
-  const ctx = await requireOffice();
-  const order = await db.order.findFirst({
-    where: { id: String(formData.get("orderId")), organizationId: ctx.orgId },
-    include: {
-      expenses: { where: { rebillable: true }, orderBy: { date: "asc" } },
-      protocols: true,
-      quote: { include: { items: { orderBy: { position: "asc" } } } },
-    },
-  });
-  if (!order) throw new Error("Auftrag nicht gefunden");
-  const existing = await db.invoice.findFirst({ where: { orderId: order.id, status: { not: "CANCELLED" } } });
-  if (existing) redirect(`/invoices/${existing.id}`);
+const orderInclude = {
+  expenses: { where: { rebillable: true }, orderBy: { date: "asc" as const } },
+  protocols: true,
+  quote: { include: { items: { orderBy: { position: "asc" as const } } } },
+} satisfies Prisma.OrderInclude;
+type OrderForInvoice = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
 
+/** Positionen eines Auftrags: Angebots- bzw. Transportpositionen + weiterberechnete Auslagen. */
+function orderItems(ctx: Ctx, order: OrderForInvoice, extraRef?: string): ItemInput[] {
   const vatRate = ctx.org.smallBusiness ? 0 : toNumber(ctx.org.defaultVatRate);
-  const refLine = `Auftrag ${orderNo(order.number)}${order.reference ? ` · Ihre Referenz: ${order.reference}` : ""}`;
+  const delivery = order.protocols.find((p) => p.type === "DELIVERY");
+  const refLine = [
+    `Auftrag ${orderNo(order.number)}${order.reference ? ` · Ihre Referenz: ${order.reference}` : ""}`,
+    extraRef ?? (delivery?.performedAt ? `Übergabe am ${formatDate(delivery.performedAt)}` : null),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   // Aus einem Angebot entstanden: die (ggf. angepassten) Angebotspositionen übernehmen
   const items: ItemInput[] = order.quote?.items.length
     ? order.quote.items.map((i, idx) => ({
@@ -77,14 +77,56 @@ export async function createInvoiceFromOrder(formData: FormData) {
       `Auslage: ${EXPENSE_CATEGORY[e.category] ?? e.category}`,
       [e.vendor, e.description].filter(Boolean).join(" – "),
       e.date ? `Beleg vom ${formatDate(e.date)}` : null,
+      extraRef ? `Auftrag ${orderNo(order.number)}` : null,
     ]
       .filter(Boolean)
       .join("\n");
     items.push({ description: desc, quantity: 1, unit: "Stk.", unitPrice, vatRate });
   }
+  return items;
+}
+
+/** Erstellt aus einem Auftrag einen Rechnungsentwurf inkl. weiterberechneter Belege. */
+export async function createInvoiceFromOrder(formData: FormData) {
+  const ctx = await requireOffice();
+  const order = await db.order.findFirst({
+    where: { id: String(formData.get("orderId")), organizationId: ctx.orgId },
+    include: orderInclude,
+  });
+  if (!order) throw new Error("Auftrag nicht gefunden");
+  if (order.collectiveInvoiceId) redirect(`/invoices/${order.collectiveInvoiceId}`);
+  const existing = await db.invoice.findFirst({ where: { orderId: order.id, status: { not: "CANCELLED" } } });
+  if (existing) redirect(`/invoices/${existing.id}`);
+
   const delivery = order.protocols.find((p) => p.type === "DELIVERY");
-  const invoice = await createDraft(ctx, order.customerId, items, order.id, delivery?.performedAt ?? order.deliveryDate ?? new Date());
+  const invoice = await createDraft(ctx, order.customerId, orderItems(ctx, order), order.id, delivery?.performedAt ?? order.deliveryDate ?? new Date());
   await logEvent(order.id, ctx, "Rechnungsentwurf erstellt");
+  redirect(`/invoices/${invoice.id}`);
+}
+
+/** Sammelrechnung: mehrere zugestellte Aufträge eines Kunden in einer Rechnung. */
+export async function createCollectiveInvoice(formData: FormData) {
+  const ctx = await requireOffice();
+  const customerId = String(formData.get("customerId"));
+  const ids = formData.getAll("orderIds").map(String);
+  const orders = await db.order.findMany({
+    where: { id: { in: ids }, organizationId: ctx.orgId, customerId, collectiveInvoiceId: null, invoices: { none: { status: { not: "CANCELLED" } } } },
+    include: orderInclude,
+    orderBy: [{ pickupDate: "asc" }, { number: "asc" }],
+  });
+  if (orders.length === 0) throw new Error("Bitte mindestens einen Auftrag auswählen.");
+  const items = orders.flatMap((o) => {
+    const d = o.protocols.find((p) => p.type === "DELIVERY");
+    return orderItems(ctx, o, d?.performedAt ? `Übergabe am ${formatDate(d.performedAt)}` : o.pickupDate ? `Termin ${formatDate(o.pickupDate)}` : undefined);
+  });
+  const dates = orders.map((o) => o.protocols.find((p) => p.type === "DELIVERY")?.performedAt ?? o.pickupDate).filter((d): d is Date => Boolean(d));
+  const invoice = await createDraft(ctx, customerId, items, undefined, dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : new Date());
+  await db.invoice.update({
+    where: { id: invoice.id },
+    data: { introText: `Vielen Dank für Ihre Aufträge. Wir berechnen Ihnen folgende ${orders.length} Überführungen:` },
+  });
+  await db.order.updateMany({ where: { id: { in: orders.map((o) => o.id) } }, data: { collectiveInvoiceId: invoice.id } });
+  for (const o of orders) await logEvent(o.id, ctx, "In Sammelrechnung übernommen");
   redirect(`/invoices/${invoice.id}`);
 }
 
@@ -192,6 +234,13 @@ async function finalize(ctx: Ctx, id: string, opts: { credit?: boolean } = {}) {
         serviceDate: current.serviceDate ?? issueDate,
       },
     });
+    if (!opts.credit) {
+      const collective = await tx.order.findMany({ where: { collectiveInvoiceId: id }, select: { id: true } });
+      for (const o of collective) {
+        await tx.order.updateMany({ where: { id: o.id, status: { not: "CANCELLED" } }, data: { status: "INVOICED" } });
+        await tx.orderEvent.create({ data: { orderId: o.id, message: `Sammelrechnung ${number} festgeschrieben`, userName: ctx.user.name ?? ctx.user.email } });
+      }
+    }
     if (invoice.orderId && !opts.credit) {
       await tx.order.updateMany({ where: { id: invoice.orderId, status: { not: "CANCELLED" } }, data: { status: "INVOICED" } });
       await tx.orderEvent.create({
@@ -256,6 +305,13 @@ export async function cancelInvoice(formData: FormData) {
     },
   });
   await db.invoice.update({ where: { id: invoice.id }, data: { status: "CANCELLED" } });
+  // Sammelrechnung storniert: Aufträge wieder freigeben, damit sie neu abgerechnet werden können
+  const collective = await db.order.findMany({ where: { collectiveInvoiceId: invoice.id }, select: { id: true } });
+  if (collective.length) {
+    await db.order.updateMany({ where: { collectiveInvoiceId: invoice.id, status: "INVOICED" }, data: { status: "DELIVERED" } });
+    await db.order.updateMany({ where: { collectiveInvoiceId: invoice.id }, data: { collectiveInvoiceId: null } });
+    for (const o of collective) await logEvent(o.id, ctx, `Sammelrechnung ${invoice.number} storniert`);
+  }
   if (invoice.orderId) {
     await db.order.updateMany({ where: { id: invoice.orderId, status: "INVOICED" }, data: { status: "DELIVERED" } });
     await logEvent(invoice.orderId, ctx, `Rechnung ${invoice.number} storniert`);

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 
 import { customerOptions, memberOptions } from "@/lib/queries";
@@ -12,10 +13,51 @@ import { requireOffice } from "@/lib/permissions";
 
 export const metadata = { title: "Neuer Auftrag" };
 
-export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ customerId?: string; vehicleId?: string }> }) {
+const COPY_FIELDS = [
+  "transportMode",
+  "pickupName",
+  "pickupStreet",
+  "pickupZip",
+  "pickupCity",
+  "pickupContact",
+  "pickupPhone",
+  "deliveryName",
+  "deliveryStreet",
+  "deliveryZip",
+  "deliveryCity",
+  "deliveryContact",
+  "deliveryPhone",
+  "distanceKm",
+  "durationMinutes",
+  "pricingType",
+  "price",
+  "pricePerKm",
+  "returnType",
+  "returnFlat",
+  "returnPerKm",
+  "notes",
+] as const;
+
+export default async function NewOrderPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customerId?: string; vehicleId?: string; copyFrom?: string; template?: string }>;
+}) {
   const ctx = await requireOffice();
-  const { customerId, vehicleId } = await searchParams;
-  const [customers, members, vehicles] = await Promise.all([customerOptions(ctx.orgId), memberOptions(ctx.orgId), vehicleOptions(ctx.orgId)]);
+  const { customerId: customerParam, vehicleId, copyFrom, template } = await searchParams;
+  const [customers, members, vehicles, templates] = await Promise.all([
+    customerOptions(ctx.orgId),
+    memberOptions(ctx.orgId),
+    vehicleOptions(ctx.orgId),
+    db.routeTemplate.findMany({ where: { organizationId: ctx.orgId }, orderBy: { name: "asc" } }),
+  ]);
+  // Vorlage oder Kopie eines Auftrags: Strecke, Kontakte und Preise übernehmen (ohne Termine und Fahrzeug)
+  const source = copyFrom
+    ? await db.order.findFirst({ where: { id: copyFrom, organizationId: ctx.orgId } })
+    : template
+      ? templates.find((t) => t.id === template) ?? null
+      : null;
+  const customerId = customerParam ?? source?.customerId ?? undefined;
   const values: Record<string, string> = { assignedToId: ctx.user.id };
   // Konditionen: Kunde (falls vorgewählt) vor Firmenstandard
   const conditions = customers.find((c) => c.id === customerId)?.conditions ?? effectiveConditions(ctx.org, null);
@@ -25,6 +67,13 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
   values.returnType = conditions.returnType;
   if (fmt(conditions.returnFlat)) values.returnFlat = fmt(conditions.returnFlat)!;
   if (fmt(conditions.returnPerKm)) values.returnPerKm = fmt(conditions.returnPerKm)!;
+
+  if (source) {
+    for (const k of COPY_FIELDS) {
+      const v = source[k];
+      if (v !== null && v !== undefined && v !== "") values[k] = typeof v === "object" ? String(v).replace(".", ",") : String(v);
+    }
+  }
 
   // Aus der Fahrzeugübersicht: Fahrzeug direkt vorbelegen
   if (vehicleId) {
@@ -45,6 +94,24 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
         subtitle="Nur der Kunde ist Pflicht – alles andere kann auch später vor Ort ergänzt werden."
         back={{ href: "/orders", label: "Aufträge" }}
       />
+      {templates.length > 0 && !source && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <span className="font-medium text-slate-600">Aus Vorlage:</span>
+          {templates.slice(0, 12).map((t) => (
+            <Link key={t.id} href={`/orders/new?template=${t.id}`} className="rounded-full bg-slate-100 px-3 py-1 hover:bg-brand-50 hover:text-brand-700">
+              {t.name}
+            </Link>
+          ))}
+          <Link href="/orders/templates" className="ml-auto text-xs text-slate-500 hover:text-brand-600">
+            Vorlagen verwalten
+          </Link>
+        </div>
+      )}
+      {source && (
+        <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 px-4 py-2 text-sm text-brand-800">
+          {copyFrom ? "Kopie eines bestehenden Auftrags" : `Vorlage „${"name" in source ? source.name : ""}“`} – Strecke, Kontakte und Preise sind übernommen. Termin und Fahrzeug bitte neu eintragen.
+        </div>
+      )}
       <OrderForm
         action={createOrder}
         customers={customers}

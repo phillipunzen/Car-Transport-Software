@@ -14,7 +14,7 @@ export async function nextSteps(orders: Order[]) {
     db.protocol.findMany({ where: { orderId: { in: ids } }, select: { orderId: true, type: true, completedAt: true } }),
     db.expense.groupBy({ by: ["orderId"], where: { orderId: { in: ids } }, _count: true }),
     db.invoice.findMany({
-      where: { orderId: { in: ids }, status: { not: "CANCELLED" } },
+      where: { OR: [{ orderId: { in: ids } }, { collectiveOrders: { some: { id: { in: ids } } } }], status: { not: "CANCELLED" } },
       orderBy: { createdAt: "desc" },
       select: { id: true, orderId: true, status: true, number: true },
     }),
@@ -26,7 +26,7 @@ export async function nextSteps(orders: Order[]) {
       const p = protocols.find((x) => x.orderId === o.id && x.type === type);
       return p?.completedAt ? ("done" as const) : p ? ("draft" as const) : ("none" as const);
     };
-    const invoice = invoices.find((i) => i.orderId === o.id) ?? null;
+    const invoice = invoices.find((i) => i.orderId === o.id || i.id === o.collectiveInvoiceId) ?? null;
     const steps = orderSteps({
       ...o,
       price: o.pricingType === "PER_KM" ? toNumber(o.distanceKm) * toNumber(o.pricePerKm) : toNumber(o.price),
