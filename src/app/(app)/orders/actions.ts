@@ -42,6 +42,11 @@ async function orderData(ctx: Ctx, formData: FormData) {
     if (!member) throw new Error("Ungültiger Fahrer");
   }
   const pricingType: PricingType = formData.get("pricingType") === "PER_KM" ? "PER_KM" : "FLAT";
+  let tradePlateId: string | null | undefined = undefined;
+  if (formData.has("tradePlateId")) {
+    tradePlateId = str(formData.get("tradePlateId"));
+    if (tradePlateId && !(await db.tradePlate.findFirst({ where: { id: tradePlateId, organizationId: ctx.orgId } }))) throw new Error("Ungültiges Kennzeichen");
+  }
   const mode = String(formData.get("transportMode"));
   return {
     transportMode: (["DRIVEN", "TRAILER", "TRUCK"].includes(mode) ? mode : "DRIVEN") as TransportMode,
@@ -79,6 +84,7 @@ async function orderData(ctx: Ctx, formData: FormData) {
     returnFlat: decimal(formData.get("returnFlat")),
     returnPerKm: decimal(formData.get("returnPerKm")),
     ...(formData.has("driverPay") ? { driverPay: decimal(formData.get("driverPay")) } : {}),
+    ...(tradePlateId !== undefined ? { tradePlateId } : {}),
     notes: str(formData.get("notes")),
     assignedToId,
   };

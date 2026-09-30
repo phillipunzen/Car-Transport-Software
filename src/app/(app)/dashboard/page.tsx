@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { customerName, formatDateTime, formatMoney, orderNo, toNumber } from "@/lib/format";
 import { ORDER_STATUS } from "@/lib/labels";
 import { berlinDay, dayBounds } from "@/lib/calendar";
+import { dueState, licenseState } from "@/lib/fleet";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { requireOffice } from "@/lib/permissions";
 
@@ -44,6 +45,11 @@ export default async function DashboardPage() {
     db.inquiry.count({ where: { organizationId: orgId, status: "NEW" } }),
     db.quote.count({ where: { organizationId: orgId, status: "SENT" } }),
   ]);
+  // Modul Kennzeichen & Führerscheine: nur melden, wenn etwas abläuft
+  const fleetIssues = ctx.org.moduleFleet
+    ? (await db.membership.findMany({ where: { organizationId: orgId } })).filter((m) => ["overdue", "soon"].includes(licenseState(m))).length +
+      (await db.tradePlate.findMany({ where: { organizationId: orgId, active: true, validUntil: { not: null } } })).filter((p) => dueState(p.validUntil) !== "ok").length
+    : 0;
   const count = (s: string) => statusCounts.find((c) => c.status === s)?._count ?? 0;
   const openSum = openInvoices.reduce((s, i) => s + toNumber(i.grossTotal), 0);
   const overdue = openInvoices.filter((i) => i.dueDate && i.dueDate < now).length;
@@ -85,11 +91,16 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {(newInquiries > 0 || overdue > 0) && (
+      {(newInquiries > 0 || overdue > 0 || fleetIssues > 0) && (
         <div className="mb-4 flex flex-wrap gap-2">
           {newInquiries > 0 && (
             <Link href="/inquiries" className="rounded-full bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-200">
               📨 {newInquiries} neue {newInquiries === 1 ? "Anfrage" : "Anfragen"}
+            </Link>
+          )}
+          {fleetIssues > 0 && (
+            <Link href="/settings/fleet" className="rounded-full bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-200">
+              🪪 {fleetIssues} {fleetIssues === 1 ? "Führerschein/Kennzeichen läuft ab" : "Führerscheine/Kennzeichen laufen ab"}
             </Link>
           )}
           {overdue > 0 && (

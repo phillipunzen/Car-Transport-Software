@@ -7,6 +7,7 @@ import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
 import { effectiveConditions } from "@/lib/pricing";
 import { OrderForm } from "@/components/order-form";
+import { tradePlateOptions } from "@/lib/queries";
 import { PageHeader } from "@/components/ui";
 import { createOrder } from "../actions";
 import { requireOffice } from "@/lib/permissions";
@@ -119,6 +120,7 @@ export default async function NewOrderPage({
         vehicles={vehicles}
         values={values}
         driverPayModule={ctx.org.moduleDriverPay}
+        tradePlates={await tradePlateOptions(ctx.org)}
         recognition={recognitionMode()}
         geo={geoEnabled()}
       />

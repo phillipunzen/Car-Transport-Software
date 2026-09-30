@@ -1,7 +1,8 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { chainGaps } from "@/lib/tour-chain";
-import type { Customer, Order, Protocol, User } from "@prisma/client";
+import { licenseState } from "@/lib/fleet";
+import type { Customer, Order, Protocol, TradePlate, User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
 import { berlinDay, dayBounds, nextDayKey } from "@/lib/calendar";
@@ -12,7 +13,7 @@ import { Empty, PageHeader } from "@/components/ui";
 
 export const metadata = { title: "Heute" };
 
-type Tour = Order & { customer: Customer; assignedTo: User | null; protocols: Pick<Protocol, "type" | "completedAt">[] };
+type Tour = Order & { customer: Customer; assignedTo: User | null; tradePlate: TradePlate | null; protocols: Pick<Protocol, "type" | "completedAt">[] };
 
 const time = (d: Date | null) => (d ? d.toLocaleTimeString("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" }) : "–");
 const addr = (street: string | null, zip: string | null, city: string | null) => [street, [zip, city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -42,6 +43,12 @@ function TourCard({ o, next, showDriver }: { o: Tour; next?: { step: { label: st
           <p className="mt-2 text-sm">
             <span className="text-slate-500">{target.label}:</span> {target.address}
             {target.contact && <span className="text-slate-500"> · {target.contact}</span>}
+          </p>
+        )}
+        {o.tradePlate && (
+          <p className="mt-2 text-xs text-slate-600">
+            Kennzeichen: <span className="font-mono font-semibold text-red-700">{o.tradePlate.plate}</span>
+            {o.tradePlate.validUntil && o.pickupDate && o.tradePlate.validUntil < o.pickupDate && <span className="ml-1 font-semibold text-red-700">– läuft vor der Tour ab!</span>}
           </p>
         )}
         {o.notes && <p className="mt-2 line-clamp-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{o.notes}</p>}
@@ -88,7 +95,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const { start, end } = dayBounds(today);
   const tomorrow = dayBounds(nextDayKey(today));
   const mine = showAll ? {} : { assignedToId: ctx.user.id };
-  const include = { customer: true, assignedTo: true, protocols: { select: { type: true, completedAt: true } } } as const;
+  const include = { customer: true, assignedTo: true, tradePlate: true, protocols: { select: { type: true, completedAt: true } } } as const;
 
   const [onTheRoad, todays, overdue, upcoming] = await Promise.all([
     db.order.findMany({ where: { organizationId: ctx.orgId, ...mine, status: "IN_TRANSIT" }, include, orderBy: { pickupDate: "asc" } }),
@@ -114,6 +121,14 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const gaps = new Map((showAll ? [] : await chainGaps([...onTheRoad, ...todays])).map((g) => [g.toId, g]));
   const dateLabel = new Date().toLocaleDateString("de-DE", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long" });
   const first = (ctx.user.name ?? "").split(" ")[0];
+  // Modul Führerscheine: dezenter Hinweis nur bei Fälligkeit
+  let licenseHint: string | null = null;
+  if (ctx.org.moduleFleet) {
+    const me = await db.membership.findFirst({ where: { organizationId: ctx.orgId, userId: ctx.user.id } });
+    const st = me ? licenseState(me) : "ok";
+    if (st === "overdue") licenseHint = "Deine Führerscheinkontrolle ist fällig – bitte beim Büro vorzeigen.";
+    else if (st === "soon") licenseHint = "Deine Führerscheinkontrolle steht bald an.";
+  }
   const nothing = onTheRoad.length + todays.length + overdue.length === 0;
 
   const section = (title: string, list: Tour[], tone = "text-slate-500") =>
@@ -173,6 +188,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             </ul>
           </section>
         )}
+        {licenseHint && <p className="text-center text-xs text-amber-700">🪪 {licenseHint}</p>}
         <p className="text-center text-sm text-slate-500">
           <Link href="/calendar" className="text-brand-600">
             Wochenplan ansehen

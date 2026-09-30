@@ -43,3 +43,13 @@ export async function getOrder(ctx: Parameters<typeof orderWhere>[0], id: string
     include: { customer: true, assignedTo: true },
   });
 }
+
+/** Aktive Überführungskennzeichen (nur mit Modul „Führerscheine & Kennzeichen“). */
+export async function tradePlateOptions(org: { id: string; moduleFleet: boolean }) {
+  if (!org.moduleFleet) return [];
+  const plates = await db.tradePlate.findMany({ where: { organizationId: org.id, active: true }, orderBy: { plate: "asc" } });
+  return plates.map((p) => ({
+    id: p.id,
+    label: `${p.plate}${p.validUntil ? ` (gültig bis ${p.validUntil.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })})` : ""}`,
+  }));
+}

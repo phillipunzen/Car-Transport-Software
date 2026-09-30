@@ -56,6 +56,7 @@ export function OrderForm({
   hidden,
   restricted = false,
   driverPayModule = false,
+  tradePlates = [],
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
@@ -74,6 +75,8 @@ export function OrderForm({
   restricted?: boolean;
   /** Modul Fahrer-Abrechnung: Vergütung je Auftrag überschreibbar */
   driverPayModule?: boolean;
+  /** Modul Kennzeichen: Überführungskennzeichen zuordnen */
+  tradePlates?: { id: string; label: string }[];
 }) {
   const isQuote = mode === "quote";
   const recordId = orderId ?? quoteId;
@@ -397,6 +400,19 @@ export function OrderForm({
           {!isQuote && input("color", "Farbe")}
           {!isQuote && input("firstRegistration", "Erstzulassung")}
           {!isQuote && input("vehicleType", "Fahrzeugtyp (z. B. PKW, Transporter, Wohnmobil)", { className: "sm:col-span-2" })}
+          {!isQuote && tradePlates.length > 0 && (
+            <div className="sm:col-span-2">
+              <label htmlFor="tradePlateId">Überführungskennzeichen</label>
+              <select id="tradePlateId" name="tradePlateId" value={v.tradePlateId ?? ""} onChange={(e) => set("tradePlateId", e.target.value)} className="input">
+                <option value="">– keins (Fahrzeug ist zugelassen) –</option>
+                {tradePlates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </section>
 

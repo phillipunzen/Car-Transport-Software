@@ -5,6 +5,7 @@ import { recognitionMode } from "@/lib/recognition";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
 import { OrderForm } from "@/components/order-form";
+import { tradePlateOptions } from "@/lib/queries";
 import { isDriver } from "@/lib/permissions";
 import { updateOrder } from "../../actions";
 
@@ -36,6 +37,7 @@ export default async function EditOrderPage({ params, searchParams }: { params: 
         orderId={order.id}
         restricted={driver}
         driverPayModule={ctx.org.moduleDriverPay}
+        tradePlates={await tradePlateOptions(ctx.org)}
         recognition={recognitionMode()}
         geo={geoEnabled()}
       />
