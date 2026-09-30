@@ -6,22 +6,27 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireCtx, type Ctx } from "@/lib/org";
-import { addressLines, formatDate, formatNumber, fromDateTimeLocal, orderNo, str, toNumber } from "@/lib/format";
+import { addressLines, decimal, formatDate, formatNumber, fromDateTimeLocal, orderNo, str, toNumber } from "@/lib/format";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { computeTotals, type ItemInput } from "@/lib/invoice";
 import type { FormState } from "@/components/action-form";
 import { logEvent } from "../orders/actions";
+import { effectiveConditions, returnLine } from "@/lib/pricing";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function createDraft(ctx: Ctx, customerId: string, items: ItemInput[], orderId?: string, serviceDate?: Date | null) {
   const customer = await db.customer.findFirstOrThrow({ where: { id: customerId, organizationId: ctx.orgId } });
   const totals = computeTotals(items, ctx.org.smallBusiness);
+  const cond = effectiveConditions(ctx.org, customer);
   return db.invoice.create({
     data: {
       organizationId: ctx.orgId,
       customerId,
       orderId,
+      discountPercent: cond.discountPercent,
+      discountDays: cond.discountPercent ? cond.discountDays : null,
+      buyerReference: customer.buyerReference,
       recipient: addressLines(customer).join("\n"),
       smallBusiness: ctx.org.smallBusiness,
       introText: ctx.org.invoiceIntroText ?? "Vielen Dank für Ihren Auftrag. Wir berechnen Ihnen folgende Leistungen:",
@@ -61,6 +66,8 @@ export async function createInvoiceFromOrder(formData: FormData) {
   } else {
     items.push({ description: lines.join("\n") + (km ? `\nStrecke: ${formatNumber(km, 1)} km` : ""), quantity: 1, unit: "Pausch.", unitPrice: toNumber(order.price), vatRate });
   }
+  const ret = returnLine(order, order.distanceKm, vatRate);
+  if (ret) items.push(ret);
   for (const e of order.expenses) {
     const gross = toNumber(e.amountGross);
     // Auslagen werden netto weiterberechnet (bei Kleinunternehmern brutto)
@@ -123,6 +130,10 @@ export async function saveInvoice(_: FormState, formData: FormData): Promise<For
   const totals = computeTotals(items, smallBusiness);
   const recipient = str(formData.get("recipient"))?.replace(/\r\n?/g, "\n") ?? null;
   if (!recipient) return { error: "Bitte die Empfängeranschrift angeben." };
+  const discountPercent = decimal(formData.get("discountPercent"));
+  const discountDays = decimal(formData.get("discountDays"));
+  if (discountPercent !== null && (discountPercent < 0 || discountPercent > 20)) return { error: "Skonto muss zwischen 0 und 20 % liegen." };
+  if (discountPercent && !discountDays) return { error: "Bitte die Skonto-Frist in Tagen angeben." };
 
   await db.$transaction([
     db.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } }),
@@ -131,6 +142,9 @@ export async function saveInvoice(_: FormState, formData: FormData): Promise<For
       data: {
         recipient,
         smallBusiness,
+        discountPercent: discountPercent || null,
+        discountDays: discountPercent && discountDays ? Math.round(discountDays) : null,
+        buyerReference: str(formData.get("buyerReference")),
         serviceDate: fromDateTimeLocal(str(formData.get("serviceDate"))),
         introText: str(formData.get("introText")),
         footerText: str(formData.get("footerText")),
@@ -163,7 +177,8 @@ async function finalize(ctx: Ctx, id: string, opts: { credit?: boolean } = {}) {
     });
     const seq = org.nextInvoiceNumber - 1;
     const number = `${org.invoicePrefix}${issueDate.getFullYear()}-${String(seq).padStart(4, "0")}`;
-    const current = await tx.invoice.findUniqueOrThrow({ where: { id } });
+    const current = await tx.invoice.findUniqueOrThrow({ where: { id }, include: { customer: true } });
+    const termDays = current.customer.paymentTermDays ?? org.paymentTermDays;
     const invoice = await tx.invoice.update({
       where: { id },
       data: {
@@ -172,7 +187,7 @@ async function finalize(ctx: Ctx, id: string, opts: { credit?: boolean } = {}) {
         status: opts.credit ? "PAID" : "ISSUED",
         paidAt: opts.credit ? issueDate : null,
         issueDate,
-        dueDate: new Date(issueDate.getTime() + org.paymentTermDays * 86400000),
+        dueDate: new Date(issueDate.getTime() + termDays * 86400000),
         serviceDate: current.serviceDate ?? issueDate,
       },
     });
@@ -220,6 +235,8 @@ export async function cancelInvoice(formData: FormData) {
       recipient: invoice.recipient,
       smallBusiness: invoice.smallBusiness,
       serviceDate: invoice.serviceDate,
+      buyerReference: invoice.buyerReference,
+      correctsNumber: invoice.number,
       introText: `Stornorechnung zur Rechnung ${invoice.number} vom ${formatDate(invoice.issueDate)}.`,
       footerText: invoice.footerText,
       netTotal: -toNumber(invoice.netTotal),

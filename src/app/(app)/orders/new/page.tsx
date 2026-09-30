@@ -4,6 +4,7 @@ import { customerOptions, memberOptions } from "@/lib/queries";
 import { recognitionMode } from "@/lib/recognition";
 import { geoEnabled } from "@/lib/geo";
 import { vehicleOptions } from "@/lib/vehicles";
+import { effectiveConditions } from "@/lib/pricing";
 import { OrderForm } from "@/components/order-form";
 import { PageHeader } from "@/components/ui";
 import { createOrder } from "../actions";
@@ -15,8 +16,14 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
   const { customerId, vehicleId } = await searchParams;
   const [customers, members, vehicles] = await Promise.all([customerOptions(ctx.orgId), memberOptions(ctx.orgId), vehicleOptions(ctx.orgId)]);
   const values: Record<string, string> = { assignedToId: ctx.user.id };
+  // Konditionen: Kunde (falls vorgewählt) vor Firmenstandard
+  const conditions = customers.find((c) => c.id === customerId)?.conditions ?? effectiveConditions(ctx.org, null);
   if (customerId) values.customerId = customerId;
-  if (ctx.org.defaultPricePerKm) values.pricePerKm = String(ctx.org.defaultPricePerKm);
+  const fmt = (n: number | null) => (n === null ? undefined : String(n).replace(".", ","));
+  if (fmt(conditions.pricePerKm)) values.pricePerKm = fmt(conditions.pricePerKm)!;
+  values.returnType = conditions.returnType;
+  if (fmt(conditions.returnFlat)) values.returnFlat = fmt(conditions.returnFlat)!;
+  if (fmt(conditions.returnPerKm)) values.returnPerKm = fmt(conditions.returnPerKm)!;
 
   // Aus der Fahrzeugübersicht: Fahrzeug direkt vorbelegen
   if (vehicleId) {

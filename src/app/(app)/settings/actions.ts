@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import type { Role } from "@prisma/client";
 import { z } from "zod";
+import { RETURN_TYPE } from "@/lib/labels";
 import { db } from "@/lib/db";
 import { requireManager } from "@/lib/org";
 import { decimal, str } from "@/lib/format";
@@ -23,6 +24,11 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
   if (iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) return { error: "Die IBAN scheint ungültig zu sein." };
   const nextInvoiceNumber = Math.round(decimal(formData.get("nextInvoiceNumber")) ?? ctx.org.nextInvoiceNumber);
   if (nextInvoiceNumber < 1) return { error: "Die nächste Rechnungsnummer muss mindestens 1 sein." };
+
+  const nextQuoteNumber = Math.round(decimal(formData.get("nextQuoteNumber")) ?? ctx.org.nextQuoteNumber);
+  if (nextQuoteNumber < 1) return { error: "Die nächste Angebotsnummer muss mindestens 1 sein." };
+  const money = (name: string, fallback: number) => Math.max(0, decimal(formData.get(name)) ?? fallback);
+  const returnType = String(formData.get("defaultReturnType") ?? "NONE");
 
   let logoFileId = ctx.org.logoFileId;
   const logo = formData.get("logo");
@@ -64,6 +70,19 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
       invoiceIntroText: str(formData.get("invoiceIntroText")),
       invoiceFooterText: str(formData.get("invoiceFooterText")),
       protocolTerms: str(formData.get("protocolTerms")),
+      defaultReturnType: RETURN_TYPE[returnType] ? returnType : "NONE",
+      defaultReturnFlat: decimal(formData.get("defaultReturnFlat")),
+      defaultReturnPerKm: decimal(formData.get("defaultReturnPerKm")),
+      perDiemEnabled: formData.get("perDiemEnabled") === "on",
+      perDiemPartial: money("perDiemPartial", 14),
+      perDiemFull: money("perDiemFull", 28),
+      quotePrefix: str(formData.get("quotePrefix")) ?? "",
+      nextQuoteNumber,
+      quoteValidDays: Math.max(1, Math.round(decimal(formData.get("quoteValidDays")) ?? 30)),
+      dunningFee1: money("dunningFee1", 0),
+      dunningFee2: money("dunningFee2", 5),
+      dunningFee3: money("dunningFee3", 10),
+      dunningDays: Math.max(1, Math.round(decimal(formData.get("dunningDays")) ?? 7)),
       logoFileId,
     },
   });

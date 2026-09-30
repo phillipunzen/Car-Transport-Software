@@ -6,7 +6,7 @@ import type { OrderStatus, PricingType, TransportMode } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canManage, nextNumber, requireCtx, type Ctx } from "@/lib/org";
 import { decimal, fromDateTimeLocal, str } from "@/lib/format";
-import { ORDER_STATUS } from "@/lib/labels";
+import { ORDER_STATUS, RETURN_TYPE } from "@/lib/labels";
 import { recognitionMode, recognizeVehicle } from "@/lib/recognition";
 import { deleteFile, saveUpload } from "@/lib/files";
 import { syncVehicle } from "@/lib/vehicles";
@@ -73,6 +73,9 @@ async function orderData(ctx: Ctx, formData: FormData) {
     pricingType,
     price: decimal(formData.get("price")),
     pricePerKm: decimal(formData.get("pricePerKm")),
+    returnType: RETURN_TYPE[String(formData.get("returnType"))] ? String(formData.get("returnType")) : "NONE",
+    returnFlat: decimal(formData.get("returnFlat")),
+    returnPerKm: decimal(formData.get("returnPerKm")),
     notes: str(formData.get("notes")),
     assignedToId,
   };

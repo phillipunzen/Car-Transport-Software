@@ -20,7 +20,7 @@ export function InvoiceEditor({
   items,
   defaultVat,
 }: {
-  invoice: { id: string; recipient: string; serviceDate: string; introText: string; footerText: string; smallBusiness: boolean };
+  invoice: { id: string; recipient: string; serviceDate: string; introText: string; footerText: string; smallBusiness: boolean; discountPercent: string; discountDays: string; buyerReference: string };
   items: Row[];
   defaultVat: number;
 }) {
@@ -57,6 +57,20 @@ export function InvoiceEditor({
             <input type="checkbox" name="smallBusiness" checked={small} onChange={(e) => setSmall(e.target.checked)} className="h-4 w-4 accent-brand-600" />
             Kleinunternehmer (§ 19 UStG, keine Umsatzsteuer)
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="discountPercent">Skonto %</label>
+              <input id="discountPercent" name="discountPercent" inputMode="decimal" defaultValue={invoice.discountPercent} placeholder="z. B. 2" className="input" />
+            </div>
+            <div>
+              <label htmlFor="discountDays">Skonto-Frist (Tage)</label>
+              <input id="discountDays" name="discountDays" type="number" min={1} defaultValue={invoice.discountDays} className="input" />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="buyerReference">Leitweg-ID / Käuferreferenz (E-Rechnung)</label>
+            <input id="buyerReference" name="buyerReference" defaultValue={invoice.buyerReference} placeholder="nur bei öffentlichen Auftraggebern Pflicht" className="input" />
+          </div>
           <p className="text-xs text-slate-500">Rechnungsnummer und Rechnungsdatum werden beim Festschreiben automatisch vergeben.</p>
         </div>
         <div className="md:col-span-2">

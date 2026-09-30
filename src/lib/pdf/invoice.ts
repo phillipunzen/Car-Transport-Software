@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import type { Customer, Invoice, InvoiceItem, Order, Organization } from "@prisma/client";
 import { customerNo, formatDate, formatMoney, orderNo, toNumber } from "@/lib/format";
 import { computeTotals } from "@/lib/invoice";
+import { discountInfo } from "@/lib/pricing";
 import { COLORS, CONTENT_W, MARGIN, PAGE_W, createDoc, drawFooters, drawLogo, ensureSpace, senderLine, t, toBuffer } from "./common";
 
 type Full = Invoice & { items: InvoiceItem[]; customer: Customer; order: Order | null };
@@ -46,6 +47,8 @@ export async function renderInvoicePdf(org: Organization, invoice: Full) {
   ];
   if (invoice.order) info.push(["Auftragsnummer", orderNo(invoice.order.number)]);
   if (invoice.order?.reference) info.push(["Ihre Referenz", invoice.order.reference]);
+  if (invoice.correctsNumber) info.push(["Storno zu", invoice.correctsNumber]);
+  if (invoice.buyerReference) info.push(["Leitweg-ID", invoice.buyerReference]);
   if (invoice.customer.vatId) info.push(["Ihre USt-IdNr.", invoice.customer.vatId]);
   const infoX = PAGE_W - MARGIN - 200;
   let iy = addrTop + 16;
@@ -132,7 +135,11 @@ export async function renderInvoicePdf(org: Organization, invoice: Full) {
     const text = `Bitte überweisen Sie den Rechnungsbetrag von ${formatMoney(gross)} bis zum ${formatDate(invoice.dueDate)} unter Angabe der Rechnungsnummer${
       org.iban ? ` auf folgendes Konto:\n${org.accountHolder || org.companyName || org.name}\nIBAN: ${org.iban.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim()}${org.bic ? `\nBIC: ${org.bic}` : ""}${org.bankName ? ` (${org.bankName})` : ""}` : "."
     }`;
-    doc.text(t(text), MARGIN, y, { width: qr ? CONTENT_W - 110 : CONTENT_W, lineGap: 1.5 });
+    const skonto = discountInfo(gross, invoice.discountPercent, invoice.discountDays, invoice.issueDate);
+    const skontoText = skonto
+      ? `\nBei Zahlung bis zum ${formatDate(skonto.until)} gewähren wir ${String(skonto.percent).replace(".", ",")} % Skonto (${formatMoney(skonto.amount)}), zahlbar sind dann ${formatMoney(skonto.payable)}.`
+      : "";
+    doc.text(t(text + skontoText), MARGIN, y, { width: qr ? CONTENT_W - 110 : CONTENT_W, lineGap: 1.5 });
     if (qr) {
       doc.image(qr, PAGE_W - MARGIN - 90, y - 4, { width: 90 });
       doc.fontSize(7).fillColor(COLORS.muted).text("Mit Banking-App scannen", PAGE_W - MARGIN - 100, y + 88, { width: 110, align: "center" });

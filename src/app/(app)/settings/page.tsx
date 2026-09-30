@@ -1,5 +1,6 @@
 import { canManage, requireCtx } from "@/lib/org";
 import { toNumber } from "@/lib/format";
+import { RETURN_TYPE } from "@/lib/labels";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, Field, PageHeader, TextArea } from "@/components/ui";
@@ -70,6 +71,49 @@ export default async function SettingsPage() {
               </label>
               <TextArea label="Einleitungstext" name="invoiceIntroText" defaultValue={o.invoiceIntroText} className="sm:col-span-3" placeholder="Vielen Dank für Ihren Auftrag. Wir berechnen Ihnen folgende Leistungen:" />
               <TextArea label="Weiterer Infotext / Schlusstext" name="invoiceFooterText" defaultValue={o.invoiceFooterText} className="sm:col-span-3" placeholder="z. B. Wir freuen uns auf die weitere Zusammenarbeit." />
+            </div>
+          </Card>
+
+          <Card title="Rückreise & Spesen">
+            <p className="mb-4 text-sm text-slate-500">
+              Standard für neue Aufträge. Pro Kunde kann das unter „Konditionen“ abweichend eingestellt werden, pro Auftrag ebenfalls.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label htmlFor="defaultReturnType">Rückreise des Fahrers</label>
+                <select id="defaultReturnType" name="defaultReturnType" defaultValue={o.defaultReturnType} className="input">
+                  {Object.entries(RETURN_TYPE).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Field label="Pauschale Rückreise (€ netto)" name="defaultReturnFlat" defaultValue={o.defaultReturnFlat ? toNumber(o.defaultReturnFlat) : ""} inputMode="decimal" />
+              <Field label="Rückreise je km (€ netto)" name="defaultReturnPerKm" defaultValue={o.defaultReturnPerKm ? toNumber(o.defaultReturnPerKm) : ""} inputMode="decimal" />
+              <label className="flex items-center gap-2 font-normal sm:col-span-3">
+                <input type="checkbox" name="perDiemEnabled" defaultChecked={o.perDiemEnabled} className="h-4 w-4 accent-brand-600" />
+                Verpflegungspauschale bei den Belegen automatisch vorschlagen
+              </label>
+              <Field label="Kleine Pauschale (> 8 Std., An-/Abreisetag)" name="perDiemPartial" defaultValue={toNumber(o.perDiemPartial)} inputMode="decimal" />
+              <Field label="Große Pauschale (voller Tag)" name="perDiemFull" defaultValue={toNumber(o.perDiemFull)} inputMode="decimal" />
+            </div>
+          </Card>
+
+          <Card title="Angebote">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Präfix Angebotsnummer" name="quotePrefix" defaultValue={o.quotePrefix} hint={`Beispiel: ${o.quotePrefix}${new Date().getFullYear()}-${String(o.nextQuoteNumber).padStart(4, "0")}`} />
+              <Field label="Nächste laufende Nummer" name="nextQuoteNumber" type="number" min={1} defaultValue={o.nextQuoteNumber} />
+              <Field label="Gültigkeit (Tage)" name="quoteValidDays" type="number" min={1} defaultValue={o.quoteValidDays} />
+            </div>
+          </Card>
+
+          <Card title="Mahnwesen">
+            <div className="grid gap-4 sm:grid-cols-4">
+              <Field label="Gebühr Zahlungserinnerung (€)" name="dunningFee1" defaultValue={toNumber(o.dunningFee1)} inputMode="decimal" />
+              <Field label="Gebühr 1. Mahnung (€)" name="dunningFee2" defaultValue={toNumber(o.dunningFee2)} inputMode="decimal" />
+              <Field label="Gebühr 2. Mahnung (€)" name="dunningFee3" defaultValue={toNumber(o.dunningFee3)} inputMode="decimal" />
+              <Field label="Neue Zahlungsfrist (Tage)" name="dunningDays" type="number" min={1} defaultValue={o.dunningDays} />
             </div>
           </Card>
 

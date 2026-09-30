@@ -21,6 +21,7 @@ model User {
   emailVerified DateTime?
   image         String?   @db.Text
   passwordHash  String?
+  calendarToken String?   @unique // geheimer Link für das Kalender-Abo (ICS)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -119,11 +120,39 @@ model Organization {
   invoiceFooterText  String?  @db.Text
   protocolTerms      String?  @db.Text
 
+  // Angebote
+  quotePrefix     String @default("AN-")
+  nextQuoteNumber Int    @default(1)
+  quoteValidDays  Int    @default(30)
+
+  // Mahnwesen (Gebühren je Stufe: 1 = Zahlungserinnerung, 2 = 1. Mahnung, 3 = 2. Mahnung)
+  dunningFee1 Decimal @default(0) @db.Decimal(10, 2)
+  dunningFee2 Decimal @default(5) @db.Decimal(10, 2)
+  dunningFee3 Decimal @default(10) @db.Decimal(10, 2)
+  dunningDays Int     @default(7)
+
+  // Verpflegungspauschale (Vorschlag)
+  perDiemEnabled Boolean @default(true)
+  perDiemPartial Decimal @default(14) @db.Decimal(10, 2) // > 8 Std. bzw. An-/Abreisetag
+  perDiemFull    Decimal @default(28) @db.Decimal(10, 2) // voller Kalendertag
+
+  // Rückreise des Fahrers (Standard für neue Aufträge)
+  defaultReturnType  String   @default("NONE") // NONE | FLAT | PER_KM | RECEIPTS
+  defaultReturnFlat  Decimal? @db.Decimal(10, 2)
+  defaultReturnPerKm Decimal? @db.Decimal(10, 2)
+
+  // Kunden-Service
+  notifyCustomerOnStatus Boolean @default(false) // E-Mail an Kunden bei Abholung/Zustellung
+  requestEnabled         Boolean @default(false) // öffentliches Anfrageformular
+  requestToken           String? @unique
+
   memberships Membership[]
   invitations Invitation[]
   customers   Customer[]
   orders      Order[]
   invoices    Invoice[]
+  quotes      Quote[]
+  inquiries   Inquiry[]
   files       File[]
   vehicles    Vehicle[]
 }
@@ -206,14 +235,25 @@ model Customer {
   city           String?
   country        String?      @default("Deutschland")
   vatId          String?
-  notes          String?      @db.Text
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+
+  // Individuelle Konditionen (leer = Standard aus den Einstellungen)
+  pricePerKm      Decimal? @db.Decimal(10, 2)
+  paymentTermDays Int?
+  discountPercent Decimal? @db.Decimal(5, 2) // Skonto in %
+  discountDays    Int? // Skonto-Frist in Tagen
+  returnType      String? // Rückreise: NONE | FLAT | PER_KM | RECEIPTS
+  returnFlat      Decimal? @db.Decimal(10, 2)
+  returnPerKm     Decimal? @db.Decimal(10, 2)
+  buyerReference  String? // Leitweg-ID / Käuferreferenz für XRechnung
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orders       Order[]
   invoices     Invoice[]
   vehicles     Vehicle[]
+  quotes       Quote[]
 
   @@unique([organizationId, number])
   @@index([organizationId])
@@ -327,6 +367,10 @@ model Order {
   distanceKm      Decimal?    @db.Decimal(10, 1)
   durationMinutes Int? // geschätzte Fahrzeit laut Routenberechnung
   skippedSteps    Json? // bewusst übersprungene Ablaufschritte, z. B. ["pickupPhotos"]
+  returnType      String      @default("NONE") // Rückreise: NONE | FLAT | PER_KM | RECEIPTS
+  returnFlat      Decimal?    @db.Decimal(10, 2)
+  returnPerKm     Decimal?    @db.Decimal(10, 2)
+  trackingToken   String?     @unique // öffentlicher Status-Link
   pricingType     PricingType @default(FLAT)
   price           Decimal?    @db.Decimal(10, 2) // Pauschale (netto)
   pricePerKm      Decimal?    @db.Decimal(10, 2)
@@ -348,6 +392,8 @@ model Order {
   expenses     Expense[]
   invoices     Invoice[]
   events       OrderEvent[]
+  quote        Quote?
+  inquiry      Inquiry?
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
@@ -469,30 +515,35 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id             String        @id @default(cuid())
-  organizationId String
-  orderId        String?
-  customerId     String
-  number         String? // wird beim Festschreiben vergeben
-  status         InvoiceStatus @default(DRAFT)
-  issueDate      DateTime?
-  dueDate        DateTime?
-  serviceDate    DateTime?
-  paidAt         DateTime?
-  recipient      String        @db.Text // Anschrift (Snapshot)
-  smallBusiness  Boolean       @default(false)
-  introText      String?       @db.Text
-  footerText     String?       @db.Text
-  netTotal       Decimal       @default(0) @db.Decimal(12, 2)
-  vatTotal       Decimal       @default(0) @db.Decimal(12, 2)
-  grossTotal     Decimal       @default(0) @db.Decimal(12, 2)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  organizationId  String
+  orderId         String?
+  customerId      String
+  number          String? // wird beim Festschreiben vergeben
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime?
+  dueDate         DateTime?
+  serviceDate     DateTime?
+  paidAt          DateTime?
+  recipient       String        @db.Text // Anschrift (Snapshot)
+  smallBusiness   Boolean       @default(false)
+  introText       String?       @db.Text
+  footerText      String?       @db.Text
+  discountPercent Decimal?      @db.Decimal(5, 2) // Skonto
+  discountDays    Int?
+  buyerReference  String? // Leitweg-ID / Käuferreferenz (XRechnung BT-10)
+  correctsNumber  String? // Stornorechnung: Nummer der ursprünglichen Rechnung
+  netTotal        Decimal       @default(0) @db.Decimal(12, 2)
+  vatTotal        Decimal       @default(0) @db.Decimal(12, 2)
+  grossTotal      Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
   customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items        InvoiceItem[]
+  dunnings     Dunning[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
@@ -511,4 +562,135 @@ model InvoiceItem {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Mahnwesen
+// ---------------------------------------------------------------------------
+
+model Dunning {
+  id        String   @id @default(cuid())
+  invoiceId String
+  level     Int // 1 = Zahlungserinnerung, 2 = 1. Mahnung, 3 = 2. Mahnung
+  fee       Decimal  @default(0) @db.Decimal(10, 2)
+  dueDate   DateTime
+  createdAt DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Angebote
+// ---------------------------------------------------------------------------
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+}
+
+model Quote {
+  id             String      @id @default(cuid())
+  organizationId String
+  customerId     String
+  number         String
+  status         QuoteStatus @default(DRAFT)
+  validUntil     DateTime?
+  recipient      String      @db.Text
+  smallBusiness  Boolean     @default(false)
+  introText      String?     @db.Text
+  footerText     String?     @db.Text
+  netTotal       Decimal     @default(0) @db.Decimal(12, 2)
+  vatTotal       Decimal     @default(0) @db.Decimal(12, 2)
+  grossTotal     Decimal     @default(0) @db.Decimal(12, 2)
+
+  // Eckdaten der Überführung (werden bei Annahme in den Auftrag übernommen)
+  transportMode   TransportMode @default(DRIVEN)
+  pickupStreet    String?
+  pickupZip       String?
+  pickupCity      String?
+  pickupDate      DateTime?
+  deliveryStreet  String?
+  deliveryZip     String?
+  deliveryCity    String?
+  licensePlate    String?
+  make            String?
+  model           String?
+  distanceKm      Decimal?      @db.Decimal(10, 1)
+  durationMinutes Int?
+  returnType      String        @default("NONE")
+
+  orderId   String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  items        QuoteItem[]
+  inquiry      Inquiry?
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  quoteId     String
+  position    Int
+  description String  @db.Text
+  quantity    Decimal @default(1) @db.Decimal(10, 2)
+  unit        String  @default("Stk.")
+  unitPrice   Decimal @db.Decimal(12, 2)
+  vatRate     Decimal @default(19) @db.Decimal(5, 2)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+// ---------------------------------------------------------------------------
+// Auftragsanfragen (öffentliches Formular)
+// ---------------------------------------------------------------------------
+
+enum InquiryStatus {
+  NEW
+  ACCEPTED
+  REJECTED
+}
+
+model Inquiry {
+  id             String        @id @default(cuid())
+  organizationId String
+  status         InquiryStatus @default(NEW)
+  companyName    String?
+  contactName    String
+  email          String
+  phone          String?
+  transportMode  TransportMode @default(DRIVEN)
+  pickupStreet   String?
+  pickupZip      String?
+  pickupCity     String?
+  pickupDate     String? // Wunschtermin (Freitext/Datum)
+  deliveryStreet String?
+  deliveryZip    String?
+  deliveryCity   String?
+  deliveryDate   String?
+  licensePlate   String?
+  make           String?
+  model          String?
+  vin            String?
+  notes          String?       @db.Text
+  orderId        String?       @unique
+  quoteId        String?       @unique
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  quote        Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
 }

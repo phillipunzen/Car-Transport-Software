@@ -81,6 +81,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             introText: invoice.introText ?? "",
             footerText: invoice.footerText ?? "",
             smallBusiness: invoice.smallBusiness,
+            discountPercent: invoice.discountPercent ? String(toNumber(invoice.discountPercent)).replace(".", ",") : "",
+            discountDays: invoice.discountDays ? String(invoice.discountDays) : "",
+            buyerReference: invoice.buyerReference ?? "",
           }}
           items={invoice.items.map((i) => ({
             description: i.description,

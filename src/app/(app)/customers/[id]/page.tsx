@@ -5,6 +5,7 @@ import { requireCtx } from "@/lib/org";
 import { customerName, customerNo, formatDate, formatMoney, orderNo } from "@/lib/format";
 import { INVOICE_STATUS, ORDER_STATUS } from "@/lib/labels";
 import { CustomerForm } from "@/components/customer-form";
+import { toPlain } from "@/lib/plain";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { deleteCustomer, updateCustomer } from "../actions";
@@ -21,6 +22,11 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     },
   });
   if (!customer) notFound();
+  // Nur die eigenen Felder (ohne Aufträge/Rechnungen) an das Formular geben
+  const { orders: _o, invoices: _i, vehicles: _v, ...customerFields } = customer;
+  void _o;
+  void _i;
+  void _v;
 
   return (
     <>
@@ -33,7 +39,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <Card title="Stammdaten">
-            <CustomerForm action={updateCustomer} customer={customer} />
+            <CustomerForm action={updateCustomer} customer={toPlain(customerFields)} />
           </Card>
           {customer.orders.length === 0 && customer.invoices.length === 0 && (
             <form action={deleteCustomer} className="mt-4">

@@ -142,3 +142,14 @@ export const CHECKLIST_ITEMS: { key: string; label: string; kind: "bool" | "coun
   { key: "lightsOk", label: "Beleuchtung in Ordnung", kind: "bool" },
   { key: "warningLights", label: "Warnleuchten im Kombiinstrument", kind: "bool" },
 ];
+
+/** Rückreise des Fahrers (bei Überführung auf eigener Achse) */
+export const RETURN_TYPE: Record<string, string> = {
+  NONE: "Nicht berechnen",
+  FLAT: "Pauschalbetrag",
+  PER_KM: "Pro Kilometer",
+  RECEIPTS: "Nach Belegen (Bahn, Bus, Taxi …)",
+};
+
+/** Beleg-Kategorien, die typischerweise zur Rückreise gehören */
+export const TRAVEL_CATEGORIES = ["TRAIN", "BUS", "FLIGHT", "TAXI", "PUBLIC_TRANSPORT"];

@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { returnCost } from "@/lib/pricing";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
 import { customerName, formatDateTime, formatMoney, formatNumber, toNumber } from "@/lib/format";
-import { INVOICE_STATUS, ORDER_STATUS, TRANSPORT_MODE } from "@/lib/labels";
+import { INVOICE_STATUS, ORDER_STATUS, RETURN_TYPE, TRANSPORT_MODE } from "@/lib/labels";
 import { Badge, Card, Dl } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { EmailDocuments } from "@/components/email-documents";
@@ -144,6 +145,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   : null,
               ],
               ["Preis (netto)", price ? formatMoney(price) + (order.pricingType === "PER_KM" ? ` (${formatMoney(order.pricePerKm)}/km)` : "") : null],
+              [
+                "Rückreise",
+                order.returnType === "NONE"
+                  ? null
+                  : order.returnType === "RECEIPTS"
+                    ? RETURN_TYPE.RECEIPTS
+                    : `${formatMoney(returnCost(order, order.distanceKm))} (${order.returnType === "FLAT" ? "Pauschale" : `${formatMoney(order.returnPerKm)}/km`})`,
+              ],
               ["Belege", expenses ? formatMoney(expenses) : null],
             ]}
           />

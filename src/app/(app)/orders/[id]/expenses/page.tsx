@@ -1,27 +1,93 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
-import { formatMoney, toDateInput, toNumber } from "@/lib/format";
+import { formatMoney, toDateInput, toDateTimeLocal, toNumber } from "@/lib/format";
+import { expenseLock } from "@/lib/expense-lock";
+import { perDiem } from "@/lib/per-diem";
 import { EXPENSE_CATEGORY } from "@/lib/labels";
 import { recognitionMode } from "@/lib/recognition";
 import { Card } from "@/components/ui";
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { SubmitButton } from "@/components/submit-button";
-import { addExpense, deleteExpense, updateExpense } from "./actions";
+import { addExpense, addPerDiem, deleteExpense, updateExpense } from "./actions";
 
 export default async function ExpensesPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
   const { id } = await params;
   const order = await db.order.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { expenses: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], include: { file: true } } },
+    include: {
+      expenses: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], include: { file: true } },
+      protocols: { select: { type: true, performedAt: true } },
+    },
   });
   if (!order) notFound();
+  const lock = await expenseLock(order.id);
+
+  // Vorschlag Verpflegungspauschale: Abholung bis Übergabe + Rückreise (Fahrzeit der Strecke)
+  const pickupAt = order.protocols.find((p) => p.type === "PICKUP")?.performedAt ?? order.pickupDate;
+  const deliveredAt = order.protocols.find((p) => p.type === "DELIVERY")?.performedAt ?? order.deliveryDate;
+  const perDiemStart = pickupAt;
+  const perDiemEnd = deliveredAt && order.durationMinutes ? new Date(deliveredAt.getTime() + order.durationMinutes * 60000) : deliveredAt;
+  const hasHotel = order.expenses.some((e) => e.category === "HOTEL");
+  const hasPerDiem = order.expenses.some((e) => e.category === "PER_DIEM");
+  const perDiemSuggestion =
+    ctx.org.perDiemEnabled && perDiemStart && perDiemEnd
+      ? perDiem(perDiemStart, perDiemEnd, toNumber(ctx.org.perDiemPartial), toNumber(ctx.org.perDiemFull), hasHotel || undefined)
+      : null;
   const total = order.expenses.reduce((s, e) => s + toNumber(e.amountGross), 0);
   const rebill = order.expenses.filter((e) => e.rebillable).reduce((s, e) => s + toNumber(e.amountGross), 0);
 
   return (
     <div className="space-y-6">
+      {lock.locked && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold">🔒 Belege gesperrt</p>
+          <p className="mt-1">
+            Die Rechnung {lock.invoiceNumber} ist festgeschrieben. Damit die Buchhaltung nachvollziehbar bleibt (GoBD), können die Belege nicht mehr geändert oder
+            gelöscht werden. Für Korrekturen die Rechnung stornieren – danach sind die Belege wieder bearbeitbar.
+          </p>
+        </div>
+      )}
+      {!lock.locked && ctx.org.perDiemEnabled && !hasPerDiem && (
+        <Card title="Verpflegungspauschale">
+          <form action={addPerDiem} className="space-y-3">
+            <input type="hidden" name="orderId" value={order.id} />
+            <p className="text-sm text-slate-600">
+              {perDiemSuggestion && perDiemSuggestion.total > 0 ? (
+                <>
+                  Vorschlag: <strong>{formatMoney(perDiemSuggestion.total)}</strong> ({perDiemSuggestion.lines.map((l) => `${l.label} ${formatMoney(l.amount)}`).join(" · ")}).
+                  Berechnet von der Abholung bis zur Übergabe plus Rückreise – bitte prüfen und bei Bedarf anpassen.
+                </>
+              ) : (
+                <>Abwesenheitszeit eintragen – die Pauschale ({formatMoney(ctx.org.perDiemPartial)} ab 8 Std. bzw. An-/Abreisetag, {formatMoney(ctx.org.perDiemFull)} je voller Tag) wird berechnet.</>
+              )}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label>Abwesend von</label>
+                <input type="datetime-local" name="start" required defaultValue={toDateTimeLocal(perDiemStart)} className="input" />
+              </div>
+              <div>
+                <label>bis (inkl. Rückreise)</label>
+                <input type="datetime-local" name="end" required defaultValue={toDateTimeLocal(perDiemEnd)} className="input" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 font-normal">
+                <input type="checkbox" name="overnight" defaultChecked={hasHotel} className="h-4 w-4 accent-brand-600" />
+                mit Übernachtung
+              </label>
+              <label className="flex items-center gap-2 font-normal">
+                <input type="checkbox" name="rebillable" className="h-4 w-4 accent-brand-600" />
+                An Kunden weiterberechnen
+              </label>
+              <SubmitButton className="btn-secondary ml-auto">Pauschale übernehmen</SubmitButton>
+            </div>
+          </form>
+        </Card>
+      )}
+      {!lock.locked && (
       <Card title="Beleg erfassen">
         <ReceiptUpload orderId={order.id} recognition={recognitionMode()} />
         <details className="mt-4">
@@ -42,6 +108,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
           </form>
         </details>
       </Card>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="card card-body">
@@ -67,7 +134,8 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
                 )}
               </a>
             )}
-            <form action={updateExpense} className="grid flex-1 gap-3 sm:grid-cols-6">
+            <form action={updateExpense} className="flex-1">
+              <fieldset disabled={lock.locked} className="grid gap-3 sm:grid-cols-6">
               <input type="hidden" name="orderId" value={order.id} />
               <input type="hidden" name="expenseId" value={e.id} />
               <div className="sm:col-span-2">
@@ -110,19 +178,25 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
                   An Kunden weiterberechnen
                 </label>
                 {e.aiExtracted && <span className="badge bg-brand-50 text-brand-700">automatisch erkannt</span>}
-                <div className="ml-auto flex gap-2">
-                  <SubmitButton className="btn-secondary py-1.5">Speichern</SubmitButton>
-                </div>
+                {lock.locked && <span className="badge bg-slate-100 text-slate-600">🔒 festgeschrieben</span>}
+                {!lock.locked && (
+                  <div className="ml-auto flex gap-2">
+                    <SubmitButton className="btn-secondary py-1.5">Speichern</SubmitButton>
+                  </div>
+                )}
               </div>
+              </fieldset>
             </form>
           </div>
-          <form action={deleteExpense} className="mt-2 text-right">
-            <input type="hidden" name="orderId" value={order.id} />
-            <input type="hidden" name="expenseId" value={e.id} />
-            <SubmitButton className="text-sm text-red-500" pendingText="…" confirm="Beleg löschen?">
-              Beleg löschen
-            </SubmitButton>
-          </form>
+          {!lock.locked && !(lock.archived && e.fileId) && (
+            <form action={deleteExpense} className="mt-2 text-right">
+              <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="expenseId" value={e.id} />
+              <SubmitButton className="text-sm text-red-500" pendingText="…" confirm="Beleg löschen?">
+                Beleg löschen
+              </SubmitButton>
+            </form>
+          )}
         </div>
       ))}
     </div>

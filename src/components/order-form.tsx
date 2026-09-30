@@ -6,7 +6,8 @@ import { ActionForm, type FormState } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { VehicleScan } from "@/components/vehicle-scan";
 import { VehiclePicker } from "@/components/vehicle-picker";
-import { TRANSPORT_MODE } from "@/lib/labels";
+import { RETURN_TYPE, TRANSPORT_MODE } from "@/lib/labels";
+import type { effectiveConditions } from "@/lib/pricing";
 import type { VehicleOption } from "@/lib/vehicles";
 import { calculateRoute, locateAddress } from "@/app/(app)/orders/geo-actions";
 
@@ -21,6 +22,7 @@ export type CustomerOption = {
   zip: string | null;
   city: string | null;
   phone: string | null;
+  conditions: ReturnType<typeof effectiveConditions>;
 };
 
 type Prefix = "pickup" | "delivery";
@@ -167,7 +169,26 @@ export function OrderForm({
       : undefined;
 
   const km = parseNum(v.distanceKm);
-  const total = v.pricingType === "PER_KM" ? km * parseNum(v.pricePerKm) : parseNum(v.price);
+  const transport = v.pricingType === "PER_KM" ? km * parseNum(v.pricePerKm) : parseNum(v.price);
+  const returnTotal = v.returnType === "FLAT" ? parseNum(v.returnFlat) : v.returnType === "PER_KM" ? km * parseNum(v.returnPerKm) : 0;
+  const total = transport + returnTotal;
+
+  /** Kunde gewählt: seine Konditionen (km-Preis, Rückreise) vorschlagen – vorhandene Eingaben bleiben */
+  function selectCustomer(id: string) {
+    const c = customers.find((x) => x.id === id)?.conditions;
+    setV((s) => {
+      const next: Record<string, string> = { ...s, customerId: id };
+      if (!c) return next;
+      const fmt = (n: number | null) => (n === null ? "" : String(n).replace(".", ","));
+      if (c.pricePerKm !== null && (!s.pricePerKm || !orderId)) next.pricePerKm = fmt(c.pricePerKm);
+      if (!orderId || !s.returnType || s.returnType === "NONE") {
+        next.returnType = c.returnType;
+        next.returnFlat = s.returnFlat || fmt(c.returnFlat);
+        next.returnPerKm = s.returnPerKm || fmt(c.returnPerKm);
+      }
+      return next;
+    });
+  }
 
   const input = (name: string, label: string, opts: { className?: string; type?: string; required?: boolean; mono?: boolean } & React.InputHTMLAttributes<HTMLInputElement> = {}) => {
     const { className = "", type = "text", required, mono, ...rest } = opts;
@@ -255,7 +276,7 @@ export function OrderForm({
               Kunde <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-2">
-              <select id="customerId" name="customerId" value={v.customerId ?? ""} onChange={(e) => set("customerId", e.target.value)} required className="input">
+              <select id="customerId" name="customerId" value={v.customerId ?? ""} onChange={(e) => selectCustomer(e.target.value)} required className="input">
                 <option value="">Bitte wählen…</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -400,9 +421,27 @@ export function OrderForm({
             ? input("price", "Pauschale netto (€)", { inputMode: "decimal" })
             : input("pricePerKm", "Preis je km netto (€)", { inputMode: "decimal" })}
         </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label htmlFor="returnType">Rückreise des Fahrers</label>
+            <select id="returnType" name="returnType" value={v.returnType ?? "NONE"} onChange={(e) => set("returnType", e.target.value)} className="input">
+              {Object.entries(RETURN_TYPE).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          {v.returnType === "FLAT" && input("returnFlat", "Rückreise-Pauschale netto (€)", { inputMode: "decimal" })}
+          {v.returnType === "PER_KM" && input("returnPerKm", "Rückreise je km netto (€)", { inputMode: "decimal" })}
+          {v.returnType === "RECEIPTS" && (
+            <p className="self-end pb-2 text-xs text-slate-500 sm:col-span-2">Bahn-, Bus- und Taxibelege werden im Auftrag unter „Belege“ erfasst und weiterberechnet.</p>
+          )}
+        </div>
         {total > 0 && (
           <p className="text-sm text-slate-600">
             Auftragswert: <strong>{total.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</strong> netto
+            {returnTotal > 0 && ` (davon Rückreise ${returnTotal.toLocaleString("de-DE", { style: "currency", currency: "EUR" })})`}
           </p>
         )}
         <div>

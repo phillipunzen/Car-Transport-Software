@@ -1,10 +1,15 @@
 import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { customerName, toDateTimeLocal } from "@/lib/format";
+import { effectiveConditions } from "@/lib/pricing";
 
 export async function customerOptions(orgId: string) {
-  const customers = await db.customer.findMany({ where: { organizationId: orgId }, orderBy: [{ companyName: "asc" }, { lastName: "asc" }] });
+  const [customers, org] = await Promise.all([
+    db.customer.findMany({ where: { organizationId: orgId }, orderBy: [{ companyName: "asc" }, { lastName: "asc" }] }),
+    db.organization.findUniqueOrThrow({ where: { id: orgId } }),
+  ]);
   return customers.map((c) => ({
+    conditions: effectiveConditions(org, c),
     id: c.id,
     name: customerName(c) + (c.city ? ` (${c.city})` : ""),
     displayName: customerName(c),

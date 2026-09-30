@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { nextNumber, requireCtx } from "@/lib/org";
-import { str } from "@/lib/format";
+import { decimal, str } from "@/lib/format";
+import { RETURN_TYPE } from "@/lib/labels";
 import type { FormState } from "@/components/action-form";
 
 function customerData(formData: FormData) {
@@ -22,12 +23,28 @@ function customerData(formData: FormData) {
     country: str(formData.get("country")) ?? "Deutschland",
     vatId: str(formData.get("vatId")),
     notes: str(formData.get("notes")),
+    // Konditionen (leer = Firmenstandard)
+    pricePerKm: decimal(formData.get("pricePerKm")),
+    paymentTermDays: intOrNull(formData.get("paymentTermDays")),
+    discountPercent: decimal(formData.get("discountPercent")),
+    discountDays: intOrNull(formData.get("discountDays")),
+    returnType: RETURN_TYPE[String(formData.get("returnType"))] ? String(formData.get("returnType")) : null,
+    returnFlat: decimal(formData.get("returnFlat")),
+    returnPerKm: decimal(formData.get("returnPerKm")),
+    buyerReference: str(formData.get("buyerReference")),
   } as const;
+}
+
+function intOrNull(v: FormDataEntryValue | null) {
+  const n = decimal(v);
+  return n === null ? null : Math.max(0, Math.round(n));
 }
 
 function validate(data: ReturnType<typeof customerData>) {
   if (data.type === "COMPANY" && !data.companyName) return "Bitte gib einen Firmennamen an.";
   if (data.type === "PRIVATE" && !data.lastName) return "Bitte gib einen Nachnamen an.";
+  if (data.discountPercent !== null && (data.discountPercent < 0 || data.discountPercent > 20)) return "Skonto bitte zwischen 0 und 20 % angeben.";
+  if (data.discountPercent && !data.discountDays) return "Bitte die Skonto-Frist (Tage) angeben.";
 }
 
 export async function createCustomer(_: FormState, formData: FormData): Promise<FormState> {

@@ -5,20 +5,35 @@ import { db } from "@/lib/db";
 import { requireCtx } from "@/lib/org";
 import { deleteFile, saveUpload } from "@/lib/files";
 import { recognitionMode, recognizeReceipt } from "@/lib/recognition";
-import { decimal, str } from "@/lib/format";
-import { EXPENSE_CATEGORY } from "@/lib/labels";
+import { decimal, fromDateTimeLocal, str, toNumber } from "@/lib/format";
+import { EXPENSE_CATEGORY, TRAVEL_CATEGORIES } from "@/lib/labels";
+import { expenseLock, lockMessage } from "@/lib/expense-lock";
+import { perDiem } from "@/lib/per-diem";
 import { logEvent } from "../../actions";
 
-async function orderFor(orderId: string) {
+async function orderFor(orderId: string, opts: { write?: boolean } = { write: true }) {
   const ctx = await requireCtx();
   const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.orgId } });
   if (!order) throw new Error("Auftrag nicht gefunden");
-  return { ctx, order };
+  const lock = await expenseLock(order.id);
+  if (opts.write && lock.locked) throw new Error(lockMessage(lock));
+  return { ctx, order, lock };
+}
+
+/** Fahrtkosten (Bahn, Taxi …) sind bei pauschal abgerechneter Rückreise bereits abgegolten. */
+function defaultRebillable(order: { returnType: string }, category: string) {
+  return !(TRAVEL_CATEGORIES.includes(category) && (order.returnType === "FLAT" || order.returnType === "PER_KM"));
 }
 
 /** Beleg hochladen und automatisch auslesen (KI oder lokale OCR). */
 export async function uploadReceipt(formData: FormData): Promise<{ error?: string; recognized?: boolean }> {
-  const { ctx, order } = await orderFor(String(formData.get("orderId")));
+  let found;
+  try {
+    found = await orderFor(String(formData.get("orderId")));
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  const { ctx, order } = found;
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Bitte eine Datei auswählen." };
 
@@ -45,6 +60,7 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
       orderId: order.id,
       fileId: saved.record.id,
       category: extracted?.category ?? "OTHER",
+      rebillable: defaultRebillable(order, extracted?.category ?? "OTHER"),
       vendor: extracted?.vendor ?? null,
       date: date && !isNaN(date.getTime()) ? date : new Date(),
       amountGross: extracted?.amountGross ?? 0,
@@ -61,11 +77,13 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
 
 export async function addExpense(formData: FormData) {
   const { ctx, order } = await orderFor(String(formData.get("orderId")));
-  const category = String(formData.get("category") ?? "OTHER");
+  const raw = String(formData.get("category") ?? "OTHER");
+  const category = EXPENSE_CATEGORY[raw] ? raw : "OTHER";
   await db.expense.create({
     data: {
       orderId: order.id,
-      category: EXPENSE_CATEGORY[category] ? category : "OTHER",
+      category,
+      rebillable: defaultRebillable(order, category),
       description: str(formData.get("description")),
       amountGross: decimal(formData.get("amountGross")) ?? 0,
       vatRate: decimal(formData.get("vatRate")) ?? 0,
@@ -97,10 +115,35 @@ export async function updateExpense(formData: FormData) {
 }
 
 export async function deleteExpense(formData: FormData) {
-  const { ctx, order } = await orderFor(String(formData.get("orderId")));
+  const { ctx, order, lock } = await orderFor(String(formData.get("orderId")));
   const expense = await db.expense.findFirst({ where: { id: String(formData.get("expenseId")), orderId: order.id } });
   if (!expense) return;
+  // Einmal abgerechnete Belege bleiben archiviert (Aufbewahrungspflicht)
+  if (lock.archived && expense.fileId) throw new Error("Dieser Beleg war bereits Teil einer Rechnung und muss aufbewahrt werden.");
   await db.expense.delete({ where: { id: expense.id } });
   if (expense.fileId) await deleteFile(ctx.orgId, expense.fileId);
+  revalidatePath(`/orders/${order.id}`, "layout");
+}
+
+/** Verpflegungspauschale aus Abwesenheitszeit berechnen und als Ausgabe übernehmen. */
+export async function addPerDiem(formData: FormData) {
+  const { ctx, order } = await orderFor(String(formData.get("orderId")));
+  const start = fromDateTimeLocal(str(formData.get("start")));
+  const end = fromDateTimeLocal(str(formData.get("end")));
+  if (!start || !end || end <= start) throw new Error("Bitte gültige Abwesenheitszeiten angeben.");
+  const result = perDiem(start, end, toNumber(ctx.org.perDiemPartial), toNumber(ctx.org.perDiemFull), formData.get("overnight") === "on");
+  if (result.total <= 0) throw new Error("Für diese Abwesenheit fällt keine Verpflegungspauschale an (8 Stunden oder weniger).");
+  await db.expense.create({
+    data: {
+      orderId: order.id,
+      category: "PER_DIEM",
+      description: `Verpflegungspauschale – ${result.lines.map((l) => l.label).join("; ")}`,
+      amountGross: result.total,
+      vatRate: 0,
+      date: end,
+      rebillable: formData.get("rebillable") === "on",
+    },
+  });
+  await logEvent(order.id, ctx, `Verpflegungspauschale übernommen (${result.total.toFixed(2).replace(".", ",")} €)`);
   revalidatePath(`/orders/${order.id}`, "layout");
 }
