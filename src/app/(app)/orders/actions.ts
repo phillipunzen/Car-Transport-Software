@@ -78,6 +78,7 @@ async function orderData(ctx: Ctx, formData: FormData) {
     returnType: RETURN_TYPE[String(formData.get("returnType"))] ? String(formData.get("returnType")) : "NONE",
     returnFlat: decimal(formData.get("returnFlat")),
     returnPerKm: decimal(formData.get("returnPerKm")),
+    ...(formData.has("driverPay") ? { driverPay: decimal(formData.get("driverPay")) } : {}),
     notes: str(formData.get("notes")),
     assignedToId,
   };
@@ -124,8 +125,8 @@ export async function updateOrder(_: FormState, formData: FormData): Promise<For
   try {
     const parsed = await orderData(ctx, formData);
     // Fahrer ändern weder Preise noch Zuweisung
-    const { pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId, ...rest } = parsed;
-    const data = driver ? rest : { ...rest, pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId };
+    const { pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId, driverPay, ...rest } = parsed;
+    const data = driver ? rest : { ...rest, pricingType, price, pricePerKm, returnType, returnFlat, returnPerKm, assignedToId, ...(driverPay !== undefined ? { driverPay } : {}) };
     const vehicleId = await syncVehicle(ctx.orgId, customer.id, data, str(formData.get("vehicleId")) ?? order.vehicleId);
     await db.order.update({
       where: { id },

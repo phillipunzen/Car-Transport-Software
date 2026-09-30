@@ -1,3 +1,5 @@
+import { db } from "@/lib/db";
+import { formatMoney } from "@/lib/format";
 import Link from "next/link";
 import { canManage, requireCtx } from "@/lib/org";
 import { ROLE } from "@/lib/labels";
@@ -12,6 +14,9 @@ export const metadata = { title: "Sicherheit" };
 export default async function SecurityPage() {
   const ctx = await requireCtx();
   const driver = ctx.role === "DRIVER";
+  const settlements = ctx.org.moduleDriverPay
+    ? await db.driverSettlement.findMany({ where: { organizationId: ctx.orgId, userId: ctx.user.id }, orderBy: { createdAt: "desc" }, take: 12 })
+    : [];
   return (
     <>
       <PageHeader title={driver ? "Profil & Sicherheit" : "Einstellungen"} subtitle={`${ctx.user.name ?? ctx.user.email} · ${ROLE[ctx.role]}`} />
@@ -21,6 +26,20 @@ export default async function SecurityPage() {
           <TwoFactor enabled={ctx.user.totpEnabled} />
         </Card>
         <div className="space-y-6">
+          {ctx.org.moduleDriverPay && settlements.length > 0 && (
+            <Card title="Meine Abrechnungen">
+              <ul className="space-y-1 text-sm">
+                {settlements.map((st) => (
+                  <li key={st.id} className="flex justify-between gap-2">
+                    <a href={`/api/settlements/${st.id}/pdf`} target="_blank" rel="noreferrer" className="text-brand-600">
+                      {st.number}
+                    </a>
+                    <span className="tabular-nums">{formatMoney(st.grossTotal)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card title="Kalender">
             <p className="text-sm text-slate-600">Eigene Touren automatisch im Handy-Kalender.</p>
             <Link href="/calendar/setup" className="btn-secondary mt-3">

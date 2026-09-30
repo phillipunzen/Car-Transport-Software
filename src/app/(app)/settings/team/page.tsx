@@ -8,7 +8,8 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, PageHeader } from "@/components/ui";
 import { SettingsNav } from "@/components/settings-nav";
-import { changeRole, inviteMember, removeMember, revokeInvitation } from "../actions";
+import { changeRole, inviteMember, removeMember, revokeInvitation, setDriverPay } from "../actions";
+import { PAY_TYPE } from "@/lib/driver-pay";
 
 export const metadata = { title: "Team" };
 
@@ -29,7 +30,7 @@ export default async function TeamPage() {
         <Card title={`Mitglieder (${members.length})`} className="lg:col-span-3">
           <ul className="-my-3 divide-y divide-slate-100">
             {members.map((m) => (
-              <li key={m.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <li key={m.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="truncate font-medium">
                     {m.user.name ?? m.user.email} {m.userId === ctx.user.id && <span className="text-xs text-slate-400">(du)</span>}
@@ -62,6 +63,24 @@ export default async function TeamPage() {
                   </div>
                 ) : (
                   <span className="badge bg-slate-100 text-slate-600">{ROLE[m.role]}</span>
+                )}
+                {manager && ctx.org.moduleDriverPay && (
+                  <form action={setDriverPay} className="flex w-full flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm sm:basis-full">
+                    <input type="hidden" name="id" value={m.id} />
+                    <span className="text-xs font-medium text-slate-500">Vergütung:</span>
+                    <select name="payType" defaultValue={m.payType} className="input mt-0 w-auto py-1.5 text-sm" aria-label="Vergütungsart">
+                      {Object.entries(PAY_TYPE).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                    <input name="payRate" defaultValue={m.payRate ? String(m.payRate).replace(".", ",") : ""} placeholder="€" inputMode="decimal" aria-label="Satz in Euro" className="input mt-0 w-24 py-1.5 text-sm" />
+                    <label className="flex items-center gap-1 text-xs font-normal">
+                      <input type="checkbox" name="payVat" defaultChecked={m.payVat} /> zzgl. USt
+                    </label>
+                    <SubmitButton className="btn-secondary px-2 py-1.5 text-xs">Speichern</SubmitButton>
+                  </form>
                 )}
               </li>
             ))}

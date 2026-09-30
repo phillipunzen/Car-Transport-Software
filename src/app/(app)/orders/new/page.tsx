@@ -51,6 +51,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
         members={members}
         vehicles={vehicles}
         values={values}
+        driverPayModule={ctx.org.moduleDriverPay}
         recognition={recognitionMode()}
         geo={geoEnabled()}
       />

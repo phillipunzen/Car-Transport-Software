@@ -55,6 +55,7 @@ export function OrderForm({
   quoteId,
   hidden,
   restricted = false,
+  driverPayModule = false,
 }: {
   action: (s: FormState, f: FormData) => Promise<FormState>;
   values?: OrderFormValues;
@@ -71,6 +72,8 @@ export function OrderForm({
   hidden?: Record<string, string>;
   /** Fahrer: ohne Kundenwechsel, Fahrerzuweisung und Preise */
   restricted?: boolean;
+  /** Modul Fahrer-Abrechnung: Vergütung je Auftrag überschreibbar */
+  driverPayModule?: boolean;
 }) {
   const isQuote = mode === "quote";
   const recordId = orderId ?? quoteId;
@@ -470,6 +473,12 @@ export function OrderForm({
             <p className="self-end pb-2 text-xs text-slate-500 sm:col-span-2">Bahn-, Bus- und Taxibelege werden im Auftrag unter „Belege“ erfasst und weiterberechnet.</p>
           )}
         </div>
+        {driverPayModule && !restricted && !isQuote && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {input("driverPay", "Fahrervergütung (€)", { inputMode: "decimal", placeholder: "automatisch" })}
+            <p className="self-end pb-2 text-xs text-slate-500 sm:col-span-2">Leer lassen = nach der Regel des Fahrers (Einstellungen → Team).</p>
+          </div>
+        )}
         {total > 0 && !restricted && (
           <p className="text-sm text-slate-600">
             Auftragswert: <strong>{total.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</strong> netto

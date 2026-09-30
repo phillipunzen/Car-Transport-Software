@@ -91,6 +91,10 @@ export async function saveSettings(_: FormState, formData: FormData): Promise<Fo
       dunningFee3: money("dunningFee3", 10),
       dunningDays: Math.max(1, Math.round(decimal(formData.get("dunningDays")) ?? 7)),
       notifyCustomerOnStatus: formData.get("notifyCustomerOnStatus") === "on",
+      datevConsultant: str(formData.get("datevConsultant"))?.replace(/\D/g, "") || null,
+      datevClient: str(formData.get("datevClient"))?.replace(/\D/g, "") || null,
+      datevChart: formData.get("datevChart") === "SKR04" ? "SKR04" : "SKR03",
+      datevRevenue: str(formData.get("datevRevenue"))?.replace(/\D/g, "") || null,
       requestEnabled,
       // Beim Aktivieren einen neuen, nicht erratbaren Link erzeugen
       ...(requestEnabled && !ctx.org.requestToken ? { requestToken: randomBytes(12).toString("base64url") } : {}),
@@ -167,5 +171,22 @@ export async function removeMember(formData: FormData) {
   if (!membership) return;
   if (membership.role === "OWNER") throw new Error("Inhaber können nicht entfernt werden.");
   await db.membership.delete({ where: { id: membership.id } });
+  revalidatePath("/settings/team");
+}
+
+/** Fahrer-Abrechnung: Vergütungsregel je Teammitglied. */
+export async function setDriverPay(formData: FormData) {
+  const ctx = await requireManager();
+  const membership = await db.membership.findFirst({ where: { id: String(formData.get("id")), organizationId: ctx.orgId } });
+  if (!membership) return;
+  const payType = String(formData.get("payType"));
+  await db.membership.update({
+    where: { id: membership.id },
+    data: {
+      payType: ["NONE", "PER_TOUR", "PER_KM"].includes(payType) ? payType : "NONE",
+      payRate: decimal(formData.get("payRate")),
+      payVat: formData.get("payVat") === "on",
+    },
+  });
   revalidatePath("/settings/team");
 }

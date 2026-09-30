@@ -10,7 +10,7 @@ import { Card } from "@/components/ui";
 import { ReceiptUpload } from "@/components/receipt-upload";
 import { SubmitButton } from "@/components/submit-button";
 import { addExpense, addPerDiem, deleteExpense, updateExpense } from "./actions";
-import { orderWhere } from "@/lib/permissions";
+import { isDriver, orderWhere } from "@/lib/permissions";
 
 export default async function ExpensesPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCtx();
@@ -24,6 +24,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
   });
   if (!order) notFound();
   const lock = await expenseLock(order.id);
+  const driver = isDriver(ctx.role);
 
   // Vorschlag Verpflegungspauschale: Abholung bis Übergabe + Rückreise (Fahrzeit der Strecke)
   const pickupAt = order.protocols.find((p) => p.type === "PICKUP")?.performedAt ?? order.pickupDate;
@@ -64,7 +65,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
                 <>Abwesenheitszeit eintragen – die Pauschale ({formatMoney(ctx.org.perDiemPartial)} ab 8 Std. bzw. An-/Abreisetag, {formatMoney(ctx.org.perDiemFull)} je voller Tag) wird berechnet.</>
               )}
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className={driver ? "hidden" : "grid gap-3 sm:grid-cols-2"}>
               <div>
                 <label>Abwesend von</label>
                 <input type="datetime-local" name="start" required defaultValue={toDateTimeLocal(perDiemStart)} className="input" />
@@ -79,10 +80,12 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
                 <input type="checkbox" name="overnight" defaultChecked={hasHotel} className="h-4 w-4 accent-brand-600" />
                 mit Übernachtung
               </label>
-              <label className="flex items-center gap-2 font-normal">
-                <input type="checkbox" name="rebillable" className="h-4 w-4 accent-brand-600" />
-                An Kunden weiterberechnen
-              </label>
+              {!driver && (
+                <label className="flex items-center gap-2 font-normal">
+                  <input type="checkbox" name="rebillable" className="h-4 w-4 accent-brand-600" />
+                  An Kunden weiterberechnen
+                </label>
+              )}
               <SubmitButton className="btn-secondary ml-auto">Pauschale übernehmen</SubmitButton>
             </div>
           </form>
@@ -174,10 +177,22 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
                 <input name="currency" defaultValue={e.currency} className="input" />
               </div>
               <div className="flex flex-wrap items-center gap-3 sm:col-span-6">
-                <label className="flex items-center gap-2 font-normal">
-                  <input type="checkbox" name="rebillable" defaultChecked={e.rebillable} className="h-4 w-4 accent-brand-600" />
-                  An Kunden weiterberechnen
-                </label>
+                {driver ? (
+                  e.rebillable && <input type="hidden" name="rebillable" value="on" />
+                ) : (
+                  <label className="flex items-center gap-2 font-normal">
+                    <input type="checkbox" name="rebillable" defaultChecked={e.rebillable} className="h-4 w-4 accent-brand-600" />
+                    An Kunden weiterberechnen
+                  </label>
+                )}
+                {ctx.org.moduleDriverPay && (
+                  <label className="flex items-center gap-2 font-normal">
+                    <input type="hidden" name="reimburseShown" value="1" />
+                    <input type="checkbox" name="reimburse" defaultChecked={e.reimburse} className="h-4 w-4 accent-brand-600" />
+                    Vom Fahrer ausgelegt
+                  </label>
+                )}
+                {e.settlementId && <span className="badge bg-emerald-50 text-emerald-700">mit Fahrer abgerechnet</span>}
                 {e.aiExtracted && <span className="badge bg-brand-50 text-brand-700">automatisch erkannt</span>}
                 {lock.locked && <span className="badge bg-slate-100 text-slate-600">🔒 festgeschrieben</span>}
                 {!lock.locked && (

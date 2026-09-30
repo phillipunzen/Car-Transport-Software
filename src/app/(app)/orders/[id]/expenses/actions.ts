@@ -10,6 +10,7 @@ import { EXPENSE_CATEGORY, TRAVEL_CATEGORIES } from "@/lib/labels";
 import { expenseLock, lockMessage } from "@/lib/expense-lock";
 import { perDiem } from "@/lib/per-diem";
 import { logEvent } from "../../actions";
+import { isDriver } from "@/lib/permissions";
 import { orderWhere } from "@/lib/permissions";
 
 async function orderFor(orderId: string, opts: { write?: boolean } = { write: true }) {
@@ -62,6 +63,8 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
       fileId: saved.record.id,
       category: extracted?.category ?? "OTHER",
       rebillable: defaultRebillable(order, extracted?.category ?? "OTHER"),
+      // Beleg vom Fahrer hochgeladen → vorgestreckt, wird über die Fahrer-Abrechnung erstattet
+      reimburse: ctx.org.moduleDriverPay && isDriver(ctx.role),
       vendor: extracted?.vendor ?? null,
       date: date && !isNaN(date.getTime()) ? date : new Date(),
       amountGross: extracted?.amountGross ?? 0,
@@ -85,6 +88,7 @@ export async function addExpense(formData: FormData) {
       orderId: order.id,
       category,
       rebillable: defaultRebillable(order, category),
+      reimburse: ctx.org.moduleDriverPay && (isDriver(ctx.role) || category === "PER_DIEM"),
       description: str(formData.get("description")),
       amountGross: decimal(formData.get("amountGross")) ?? 0,
       vatRate: decimal(formData.get("vatRate")) ?? 0,
@@ -99,8 +103,9 @@ export async function updateExpense(formData: FormData) {
   const { order } = await orderFor(String(formData.get("orderId")));
   const category = String(formData.get("category"));
   const dateStr = str(formData.get("date"));
+  // Bereits mit dem Fahrer abgerechnete Belege bleiben unverändert
   await db.expense.updateMany({
-    where: { id: String(formData.get("expenseId")), orderId: order.id },
+    where: { id: String(formData.get("expenseId")), orderId: order.id, settlementId: null },
     data: {
       category: EXPENSE_CATEGORY[category] ? category : "OTHER",
       vendor: str(formData.get("vendor")),
@@ -110,6 +115,7 @@ export async function updateExpense(formData: FormData) {
       vatRate: decimal(formData.get("vatRate")) ?? 0,
       currency: (str(formData.get("currency")) ?? "EUR").toUpperCase().slice(0, 3),
       rebillable: formData.get("rebillable") === "on",
+      ...(formData.has("reimburseShown") ? { reimburse: formData.get("reimburse") === "on" } : {}),
     },
   });
   revalidatePath(`/orders/${order.id}/expenses`);
@@ -119,6 +125,7 @@ export async function deleteExpense(formData: FormData) {
   const { ctx, order, lock } = await orderFor(String(formData.get("orderId")));
   const expense = await db.expense.findFirst({ where: { id: String(formData.get("expenseId")), orderId: order.id } });
   if (!expense) return;
+  if (expense.settlementId) throw new Error("Dieser Beleg ist Teil einer Fahrer-Abrechnung.");
   // Einmal abgerechnete Belege bleiben archiviert (Aufbewahrungspflicht)
   if (lock.archived && expense.fileId) throw new Error("Dieser Beleg war bereits Teil einer Rechnung und muss aufbewahrt werden.");
   await db.expense.delete({ where: { id: expense.id } });
@@ -143,6 +150,7 @@ export async function addPerDiem(formData: FormData) {
       vatRate: 0,
       date: end,
       rebillable: formData.get("rebillable") === "on",
+      reimburse: ctx.org.moduleDriverPay,
     },
   });
   await logEvent(order.id, ctx, `Verpflegungspauschale übernommen (${result.total.toFixed(2).replace(".", ",")} €)`);

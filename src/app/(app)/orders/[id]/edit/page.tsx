@@ -35,6 +35,7 @@ export default async function EditOrderPage({ params, searchParams }: { params: 
         values={values}
         orderId={order.id}
         restricted={driver}
+        driverPayModule={ctx.org.moduleDriverPay}
         recognition={recognitionMode()}
         geo={geoEnabled()}
       />

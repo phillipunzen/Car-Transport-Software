@@ -66,6 +66,26 @@ export default async function SettingsPage() {
             </div>
           </Card>
 
+          <div id="datev">
+            <Card title="Buchhaltung (DATEV-Export)">
+              <div className="grid gap-4 sm:grid-cols-4">
+                <Field label="Beraternummer" name="datevConsultant" defaultValue={o.datevConsultant} inputMode="numeric" />
+                <Field label="Mandantennummer" name="datevClient" defaultValue={o.datevClient} inputMode="numeric" />
+                <div>
+                  <label htmlFor="datevChart">Kontenrahmen</label>
+                  <select id="datevChart" name="datevChart" defaultValue={o.datevChart} className="input">
+                    <option value="SKR03">SKR03</option>
+                    <option value="SKR04">SKR04</option>
+                  </select>
+                </div>
+                <Field label="Erlöskonto 19 % (optional)" name="datevRevenue" defaultValue={o.datevRevenue} placeholder={o.datevChart === "SKR04" ? "4400" : "8400"} inputMode="numeric" />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Export unter Auswertungen. Debitoren = 10000 + Kundennummer. Bitte Kontenzuordnung einmal mit dem Steuerbüro abstimmen.
+              </p>
+            </Card>
+          </div>
+
           <Card title="Rückreise & Spesen">
             <p className="mb-4 text-sm text-slate-500">
               Standard für neue Aufträge. Pro Kunde kann das unter „Konditionen“ abweichend eingestellt werden, pro Auftrag ebenfalls.
