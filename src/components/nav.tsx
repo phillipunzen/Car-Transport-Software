@@ -99,6 +99,7 @@ export function BottomNav() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => setMore(false)}
                   className={`flex flex-col items-center gap-1 rounded-xl p-3 text-xs font-medium ${isActive(path, item.href) ? "bg-brand-50 text-brand-700" : "bg-slate-50 text-slate-700"}`}
                 >
                   <Icon name={item.icon} />
