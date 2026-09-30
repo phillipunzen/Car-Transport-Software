@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -79,4 +80,14 @@ export async function deleteCustomer(formData: FormData) {
   if (used > 0) throw new Error("Kunde hat Aufträge oder Rechnungen und kann nicht gelöscht werden.");
   await db.customer.deleteMany({ where: { id, organizationId: ctx.orgId } });
   redirect("/customers");
+}
+
+/** Kundenportal: persönlichen Link erzeugen bzw. deaktivieren. */
+export async function setPortalLink(formData: FormData) {
+  const ctx = await requireOffice();
+  const customer = await db.customer.findFirst({ where: { id: String(formData.get("id")), organizationId: ctx.orgId } });
+  if (!customer) return;
+  const enable = formData.get("enable") === "1";
+  await db.customer.update({ where: { id: customer.id }, data: { portalToken: enable ? randomBytes(18).toString("base64url") : null } });
+  revalidatePath(`/customers/${customer.id}`);
 }

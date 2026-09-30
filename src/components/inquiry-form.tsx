@@ -1,13 +1,24 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { submitInquiry } from "@/app/anfrage/actions";
+import { submitInquiry, submitPortalInquiry } from "@/app/anfrage/actions";
 import { TRANSPORT_MODE } from "@/lib/labels";
 import type { FormState } from "@/components/action-form";
 
 /** Öffentliches Anfrageformular (ohne Anmeldung). */
-export function InquiryForm({ token, company }: { token: string; company: string }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(submitInquiry, undefined);
+export function InquiryForm({
+  token,
+  company,
+  portal = false,
+  defaults = {},
+}: {
+  token: string;
+  company: string;
+  /** Aus dem Kundenportal: Kontaktdaten sind bekannt */
+  portal?: boolean;
+  defaults?: Partial<Record<"contactName" | "companyName" | "email" | "phone", string>>;
+}) {
+  const [state, action, pending] = useActionState<FormState, FormData>(portal ? submitPortalInquiry : submitInquiry, undefined);
   const [ts] = useState(() => Date.now());
 
   if (state?.ok) {
@@ -25,7 +36,7 @@ export function InquiryForm({ token, company }: { token: string; company: string
         {label}
         {props.required && <span className="text-red-500"> *</span>}
       </label>
-      <input id={name} name={name} {...props} className="input" />
+      <input id={name} name={name} defaultValue={defaults[name as keyof typeof defaults]} {...props} className="input" />
     </div>
   );
 

@@ -8,7 +8,9 @@ import { CustomerForm } from "@/components/customer-form";
 import { toPlain } from "@/lib/plain";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
-import { deleteCustomer, updateCustomer } from "../actions";
+import { deleteCustomer, setPortalLink, updateCustomer } from "../actions";
+import { appUrl } from "@/lib/mail";
+import { CopyField } from "@/components/copy-field";
 import { requireOffice } from "@/lib/permissions";
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +63,30 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           )}
         </div>
         <div className="space-y-6 lg:col-span-2">
+          <Card title="Kundenportal">
+            {customer.portalToken ? (
+              <div className="space-y-3">
+                <CopyField value={`${appUrl()}/portal/${customer.portalToken}`} label="Link zum Kundenportal" />
+                <p className="text-xs text-slate-500">Der Kunde sieht dort seine Aufträge (mit Live-Status und Protokollen), offene Angebote zum Annehmen und Rechnungen – und kann neue Überführungen anfragen.</p>
+                <form action={setPortalLink} className="flex gap-3 text-xs">
+                  <input type="hidden" name="id" value={customer.id} />
+                  <SubmitButton name="enable" value="1" className="text-brand-600 underline" confirm="Neuen Link erzeugen? Der bisherige funktioniert dann nicht mehr.">
+                    Neuen Link erzeugen
+                  </SubmitButton>
+                  <SubmitButton name="enable" value="0" className="text-red-600 underline" confirm="Kundenportal für diesen Kunden deaktivieren?">
+                    Deaktivieren
+                  </SubmitButton>
+                </form>
+              </div>
+            ) : (
+              <form action={setPortalLink}>
+                <input type="hidden" name="id" value={customer.id} />
+                <input type="hidden" name="enable" value="1" />
+                <p className="mb-3 text-sm text-slate-600">Ein persönlicher Link, über den der Kunde Aufträge, Protokolle, Angebote und Rechnungen einsehen und neue Überführungen anfragen kann – ohne Anmeldung.</p>
+                <SubmitButton className="btn-secondary w-full">Kundenportal-Link erstellen</SubmitButton>
+              </form>
+            )}
+          </Card>
           <Card title="Aufträge">
             {customer.orders.length === 0 ? (
               <p className="text-sm text-slate-500">Noch keine Aufträge.</p>

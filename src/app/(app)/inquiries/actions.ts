@@ -17,6 +17,10 @@ async function requireInquiry(ctx: Ctx, id: string) {
 
 /** Kunde zur Anfrage: vorhandenen Kunden mit gleicher E-Mail verwenden, sonst neu anlegen. */
 async function customerFor(ctx: Ctx, inquiry: Awaited<ReturnType<typeof requireInquiry>>) {
+  if (inquiry.customerId) {
+    const known = await db.customer.findFirst({ where: { id: inquiry.customerId, organizationId: ctx.orgId } });
+    if (known) return known;
+  }
   const existing = await db.customer.findFirst({ where: { organizationId: ctx.orgId, email: inquiry.email } });
   if (existing) return existing;
   const [firstName, ...rest] = inquiry.contactName.split(/\s+/);

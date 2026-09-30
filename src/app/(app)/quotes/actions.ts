@@ -6,13 +6,12 @@ import { z } from "zod";
 import type { PricingType, QuoteStatus, TransportMode } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canManage, nextNumber, type Ctx } from "@/lib/org";
-import { addressLines, decimal, formatDate, fromDateTimeLocal, str, toNumber } from "@/lib/format";
+import { addressLines, decimal, fromDateTimeLocal, str, toNumber } from "@/lib/format";
 import { RETURN_TYPE } from "@/lib/labels";
 import { computeTotals, type ItemInput } from "@/lib/invoice";
 import { transportItems } from "@/lib/pricing";
-import { syncVehicle } from "@/lib/vehicles";
+import { createOrderFromQuote } from "@/lib/quote-order";
 import type { FormState } from "@/components/action-form";
-import { logEvent } from "../orders/actions";
 import { requireOffice } from "@/lib/permissions";
 
 async function requireQuote(ctx: Ctx, id: string) {
@@ -182,42 +181,7 @@ export async function acceptQuote(formData: FormData) {
   const ctx = await requireOffice();
   const quote = await requireQuote(ctx, String(formData.get("id")));
   if (quote.orderId) redirect(`/orders/${quote.orderId}`);
-  const vehicle = { licensePlate: quote.licensePlate, make: quote.make, model: quote.model, vin: null, color: null, firstRegistration: null, vehicleType: null };
-  const vehicleId = quote.licensePlate || quote.make ? await syncVehicle(ctx.orgId, quote.customerId, vehicle, null) : null;
-  const number = await nextNumber(ctx.orgId, "nextOrderNumber");
-  const order = await db.order.create({
-    data: {
-      organizationId: ctx.orgId,
-      customerId: quote.customerId,
-      number,
-      status: quote.pickupDate ? "PLANNED" : "DRAFT",
-      createdById: ctx.user.id,
-      assignedToId: ctx.user.id,
-      transportMode: quote.transportMode,
-      pickupStreet: quote.pickupStreet,
-      pickupZip: quote.pickupZip,
-      pickupCity: quote.pickupCity,
-      pickupDate: quote.pickupDate,
-      deliveryStreet: quote.deliveryStreet,
-      deliveryZip: quote.deliveryZip,
-      deliveryCity: quote.deliveryCity,
-      licensePlate: quote.licensePlate,
-      make: quote.make,
-      model: quote.model,
-      vehicleId,
-      distanceKm: quote.distanceKm,
-      durationMinutes: quote.durationMinutes,
-      pricingType: quote.pricingType,
-      price: quote.price,
-      pricePerKm: quote.pricePerKm,
-      returnType: quote.returnType,
-      returnFlat: quote.returnFlat,
-      returnPerKm: quote.returnPerKm,
-    },
-  });
-  await db.quote.update({ where: { id: quote.id }, data: { status: "ACCEPTED", orderId: order.id } });
-  await db.inquiry.updateMany({ where: { quoteId: quote.id, orderId: null }, data: { orderId: order.id } });
-  await logEvent(order.id, ctx, `Auftrag aus Angebot ${quote.number} (${formatDate(quote.createdAt)}) erstellt`);
+  const order = await createOrderFromQuote(quote, { userId: ctx.user.id, userName: ctx.user.name ?? ctx.user.email });
   redirect(`/orders/${order.id}/edit`);
 }
 

@@ -85,3 +85,41 @@ Bearbeiten: ${appUrl()}/inquiries/${inquiry.id}`,
   }
   return { ok: "Vielen Dank! Ihre Anfrage ist eingegangen – wir melden uns in Kürze mit einem Angebot." };
 }
+
+/** Anfrage aus dem Kundenportal (Kunde ist bekannt, kein öffentliches Formular nötig). */
+export async function submitPortalInquiry(_: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get("token") ?? "");
+  if (!validToken(token)) return { error: "Der Link ist nicht mehr gültig." };
+  if (String(formData.get("website") ?? "") !== "") return { ok: "Vielen Dank! Ihre Anfrage ist eingegangen." };
+  const customer = await db.customer.findUnique({ where: { portalToken: token }, include: { organization: true } });
+  if (!customer) return { error: "Der Link ist nicht mehr gültig." };
+  const recent = await db.inquiry.count({ where: { customerId: customer.id, createdAt: { gte: new Date(Date.now() - 3600000) } } });
+  if (recent >= 20) return { error: "Zu viele Anfragen in kurzer Zeit. Bitte kontaktieren Sie uns direkt." };
+  const parsed = Schema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const d = parsed.data;
+  const org = customer.organization;
+  const inquiry = await db.inquiry.create({
+    data: {
+      ...d,
+      transportMode: d.transportMode as TransportMode,
+      vin: d.vin?.replace(/\s/g, "").toUpperCase() ?? null,
+      licensePlate: d.licensePlate?.toUpperCase() ?? null,
+      organizationId: org.id,
+      customerId: customer.id,
+    },
+  });
+  if (mailEnabled() && org.email) {
+    try {
+      await sendMailWith({
+        to: org.email,
+        replyTo: d.email,
+        subject: `Neue Anfrage über das Kundenportal: ${d.pickupCity} → ${d.deliveryCity}`,
+        text: `${d.contactName}${d.companyName ? ` (${d.companyName})` : ""} hat über das Kundenportal angefragt.\n\n${d.pickupCity} → ${d.deliveryCity}${d.pickupDate ? `, Wunschtermin ${d.pickupDate}` : ""}\n${d.notes ?? ""}\n\nBearbeiten: ${appUrl()}/inquiries/${inquiry.id}`,
+      });
+    } catch (e) {
+      console.error("Benachrichtigung zur Anfrage fehlgeschlagen", e);
+    }
+  }
+  return { ok: "Vielen Dank! Ihre Anfrage ist eingegangen – wir melden uns in Kürze." };
+}

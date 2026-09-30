@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 
 import { customerName, formatDate, formatMoney, formatNumber, orderNo, toDateInput, toNumber } from "@/lib/format";
 import { QUOTE_STATUS, RETURN_TYPE, TRANSPORT_MODE } from "@/lib/labels";
-import { mailEnabled } from "@/lib/mail";
+import { appUrl, mailEnabled } from "@/lib/mail";
+import { randomBytes } from "node:crypto";
+import { CopyField } from "@/components/copy-field";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { EmailDocuments } from "@/components/email-documents";
@@ -20,6 +22,12 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
     include: { customer: true, items: { orderBy: { position: "asc" } }, order: true, inquiry: true },
   });
   if (!quote) notFound();
+  // Link zur Online-Annahme (wird beim ersten Öffnen erzeugt)
+  if (!quote.publicToken && quote.status !== "ACCEPTED") {
+    quote.publicToken = randomBytes(18).toString("base64url");
+    await db.quote.update({ where: { id: quote.id }, data: { publicToken: quote.publicToken } });
+  }
+  const publicUrl = quote.publicToken ? `${appUrl()}/q/${quote.publicToken}` : null;
   const locked = quote.status === "ACCEPTED";
   const company = ctx.org.companyName ?? ctx.org.name;
   const c = quote.customer;
@@ -106,6 +114,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         </div>
         <div className="space-y-6">
           <Card title="Nächster Schritt">
+            {quote.responseNote && <p className="mb-3 whitespace-pre-wrap rounded bg-slate-50 px-3 py-2 text-sm text-slate-700">Rückmeldung des Kunden: {quote.responseNote}</p>}
             {quote.order ? (
               <p className="text-sm">
                 Angenommen – daraus wurde{" "}
@@ -124,7 +133,10 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                   message={`${greeting},
 
 vielen Dank für Ihre Anfrage. Anbei erhalten Sie unser Angebot ${quote.number} für die Überführung ${route} über ${formatMoney(quote.grossTotal)}.
-Das Angebot ist gültig bis ${formatDate(quote.validUntil)}. Zur Beauftragung genügt eine kurze Antwort auf diese E-Mail.
+Das Angebot ist gültig bis ${formatDate(quote.validUntil)}.${publicUrl ? `
+
+Sie können das Angebot bequem online annehmen:
+${publicUrl}` : " Zur Beauftragung genügt eine kurze Antwort auf diese E-Mail."}
 
 Mit freundlichen Grüßen
 ${company}`}
@@ -138,6 +150,12 @@ ${company}`}
                     ✓ Angenommen → Auftrag anlegen
                   </SubmitButton>
                 </form>
+                {publicUrl && (
+                  <div className="pt-2">
+                    <p className="mb-1 text-xs font-medium text-slate-500">Link zur Online-Annahme</p>
+                    <CopyField value={publicUrl} label="Link zur Online-Annahme" />
+                  </div>
+                )}
                 {quote.status === "DRAFT" && status("SENT", "Als versendet markieren")}
                 {quote.status !== "DECLINED" ? status("DECLINED", "Abgelehnt") : status("DRAFT", "Wieder öffnen")}
               </div>
