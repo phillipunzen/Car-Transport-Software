@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { appUrl, mailEnabled, sendMailWith } from "@/lib/mail";
 import { validToken } from "@/lib/public";
@@ -45,7 +44,6 @@ export async function acceptQuoteOnline(_: QuoteResponseState, formData: FormDat
     `Angebot ${quote.number} angenommen – Auftrag ${orderNo(order.number)}`,
     `${name} hat das Angebot ${quote.number} online angenommen.${note ? `\n\nHinweis des Kunden:\n${note}` : ""}\n\nAuftrag: ${appUrl()}/orders/${order.id}`,
   );
-  revalidatePath(`/q/${quote.publicToken}`);
   return { ok: "Vielen Dank für Ihren Auftrag! Wir melden uns mit der Terminbestätigung." };
 }
 
@@ -55,6 +53,5 @@ export async function declineQuoteOnline(_: QuoteResponseState, formData: FormDa
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 2000);
   await db.quote.update({ where: { id: quote.id }, data: { status: "DECLINED", respondedAt: new Date(), responseNote: reason ? `Abgelehnt: ${reason}` : "Abgelehnt" } });
   await notifyOffice(quote.organization, `Angebot ${quote.number} abgelehnt`, `Das Angebot ${quote.number} wurde online abgelehnt.${reason ? `\n\nBegründung: ${reason}` : ""}\n\n${appUrl()}/quotes/${quote.id}`);
-  revalidatePath(`/q/${quote.publicToken}`);
   return { ok: "Danke für Ihre Rückmeldung." };
 }

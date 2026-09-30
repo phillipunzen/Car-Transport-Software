@@ -153,7 +153,7 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
             token={token}
             company={company}
             portal
-            defaults={{ contactName: [customer.firstName, customer.lastName].filter(Boolean).join(" "), companyName: customer.companyName ?? "", email: customer.email ?? "", phone: customer.phone ?? "" }}
+            defaults={{ contactName: [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customerName(customer), companyName: customer.companyName ?? "", email: customer.email ?? "", phone: customer.phone ?? "" }}
           />
         </section>
 
