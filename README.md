@@ -4,6 +4,11 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 
 ## Funktionen
 
+**Handy & Büro**
+- Unterwegs (Handy/iPad) nur das Nötigste: „Heute“, Kalender, Aufträge und der nächste Arbeitsschritt; Zusatzbereiche sind eingeklappt
+- Im Büro (großer Bildschirm mit Maus) sind alle Zwischenschritte, Verläufe und Optionen direkt sichtbar
+- Navigation gruppiert in „Unterwegs“ und „Büro“; Module erscheinen nur, wenn sie eingeschaltet sind
+
 **Geführter Ablauf je Auftrag**
 - Schrittleiste oben in jedem Auftrag: Vorbereiten → Fotos Abholung → Abholprotokoll → Fotos Übergabe → Übergabeprotokoll → Rechnung → Bezahlt
 - Ein Hinweis „Nächster Schritt“ mit genau einer Schaltfläche führt direkt zur richtigen Stelle
@@ -19,6 +24,9 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Adressen per Knopfdruck vom Kunden übernehmen oder über den **aktuellen Standort** (GPS) ermitteln
 - **Automatische Streckenberechnung** (km & Fahrzeit) aus Abhol- und Zieladresse – jederzeit überschreibbar
 - Filter (aktiv, unterwegs, abzurechnen, „Meine“) und Suche nach Kennzeichen, FIN, Kunde, Ort
+- **Auftrag kopieren** und **Streckenvorlagen** für wiederkehrende Überführungen (Kontakte, Strecke, Preise)
+- **Kilometer-Plausibilität:** Warnung beim Übergabeprotokoll, wenn die gefahrenen km deutlich von der Strecke abweichen; Anzeige von gefahrenen km und Tank-/Ladestand
+- **Fahrtenbuch** je Fahrzeug als CSV
 - Direktlinks zu Google Maps (Adresse & Route) und Telefon
 - **Status-Link für den Kunden** (ohne Anmeldung): zeigt, ob das Fahrzeug abgeholt/zugestellt ist, mit Protokoll-Download; teilen per WhatsApp, E-Mail oder Share-Sheet, jederzeit deaktivierbar
 - Optional **automatische E-Mail an den Kunden** bei Abholung und Zustellung (mit Status-Link bzw. Übergabeprotokoll)
@@ -27,11 +35,14 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Angebot aus Eckdaten: Strecke (automatisch berechnet), Kundenkonditionen und Rückreise ergeben die Positionen – danach frei anpassbar
 - Angebots-PDF, Versand per E-Mail, Status (Entwurf, versendet, angenommen, abgelehnt, abgelaufen)
 - „Angenommen“ legt den Auftrag mit allen Daten an; die Rechnung übernimmt später die Angebotspositionen
+- **Online-Annahme:** Der Kunde nimmt das Angebot über einen Link an (oder lehnt ab) – der Auftrag entsteht automatisch, das Büro wird per E-Mail informiert
+- **Kundenportal** je Kunde (persönlicher Link): Aufträge mit Live-Status und Protokollen, offene Angebote, Rechnungen als PDF und neue Anfragen mit vorausgefüllten Kontaktdaten
 - **Öffentliches Anfrageformular** (Link oder per `<iframe>` auf der eigenen Website) mit Spamschutz; Anfragen werden mit einem Klick zum Angebot oder Auftrag, der Kunde wird automatisch zugeordnet bzw. angelegt
 
 **Tourenplanung & Kalender**
 - Wochenplan je Fahrer, „Noch einzuplanen“-Liste mit schnellem Einplanen (Fahrer + Termin), Umplanen per Klick
 - **Kalender-Abo (iCal)** für iPhone/iPad/Mac, Google Kalender/Android und Outlook – persönlicher, erneuerbarer Link; Anleitung Schritt für Schritt direkt in der App (Kalender → Kalender-Abo)
+- **Tourenkette:** Leerfahrt zwischen zwei Touren eines Fahrers (km/Fahrzeit) und Anschluss-Vorschläge, wenn eine Tour nahe einer offenen Abholung endet – spart die Rückreise
 - **Fahreransicht „Heute“**: eigene Touren des Tages mit Navigation, Anruf beim Ansprechpartner und dem nächsten Arbeitsschritt; überfällige und morgige Touren
 
 **Fahrzeugbestand**
@@ -74,8 +85,19 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Kleinunternehmerregelung (§ 19 UStG), mehrere Steuersätze, Zahlungsziel und Skonto je Kunde, Status offen/überfällig/bezahlt
 - Stornierung erzeugt automatisch eine **Stornorechnung**
 - **E-Rechnung:** festgeschriebene Rechnungen sind ZUGFeRD/Factur-X-PDFs (PDF/A-3b mit eingebetteter XML, Profil XRechnung); zusätzlich reine **XRechnung-XML** (UN/CEFACT CII, EN 16931) zum Download oder als E-Mail-Anhang, inkl. Leitweg-ID, Skonto und Stornobezug. Geprüft mit dem Mustang-Validator (XRechnung-3.0-Schematron) und veraPDF
+- **Sammelrechnung:** mehrere zugestellte Aufträge eines Kunden in einer Rechnung
 - **Mahnwesen:** Zahlungserinnerung, 1. und 2. Mahnung mit einstellbaren Gebühren und Fristen, Mahn-PDF mit GiroCode über den Gesamtbetrag, Versand per E-Mail (Rechnung im Anhang), Filter „Überfällig“
 - Zentrale Einstellungen: Firmenname, Adresse, Kontakt, Steuernummer/USt-IdNr., IBAN/BIC, Einleitungs- und Schlusstext, Protokoll-Hinweistext
+
+**Auswertungen**
+- Umsatz, Touren, km, Umsatz je km, Deckungsbeitrag (nach Auslagen und Fahrervergütung), Monatsverlauf, Kunden, Fahrer-Auslastung, Kundenbewertungen – für frei wählbare Zeiträume
+- **DATEV-Export** (Buchungsstapel EXTF, SKR03/SKR04, Debitoren = 10000 + Kundennummer) und Rechnungsliste als CSV. Die Kontenzuordnung bitte einmal mit dem Steuerbüro abstimmen
+
+**Module (Einstellungen → Module, standardmäßig aus)**
+- **Fahrer-Abrechnung:** Vergütung je Fahrer pro Tour oder pro km (optional zzgl. USt), Überschreiben je Auftrag, vom Fahrer vorgestreckte Auslagen, Abrechnung bzw. Gutschrift als PDF; Fahrer sehen ihre Abrechnungen im Profil
+- **Zahlungsabgleich:** Kontoauszug als CSV (Sparkasse, Volksbank, DKB, ING, Commerzbank …) oder CAMT.053 hochladen; Zuordnung über Rechnungsnummer, Betrag (inkl. Skonto/Mahngebühren) und Zahler; Übernahme mit einem Klick
+- **Führerscheine & Überführungskennzeichen:** Führerscheinkontrolle (Klassen, Ablauf, Kontrolle alle 6 Monate), rote Kennzeichen/Kurzzeitkennzeichen mit Ablaufdatum und Zuordnung im Auftrag – Hinweise nur bei Fälligkeit
+- **Bewertungen:** nach der Übergabe kurze Zufriedenheitsabfrage per E-Mail; zufriedene Kunden werden zum Bewertungsprofil (z. B. Google) geleitet, Kritik geht intern an das Büro
 
 **Funkloch-sicher (Offline)**
 - Ohne Verbindung bleiben Formulareingaben erhalten und werden automatisch gesendet, sobald wieder Netz da ist
@@ -87,7 +109,8 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 **Benutzer & Teams**
 - Registrierung per E-Mail/Passwort, **Login mit Google oder Apple**
 - Jede Registrierung erhält eine eigene **Instanz** (Firma); weitere Personen können per Einladungslink/E-Mail eingeladen werden
-- Rollen: Inhaber, Administrator, Mitarbeiter; Wechsel zwischen mehreren Instanzen
+- Rollen: Inhaber, Administrator, Mitarbeiter (Büro) und **Fahrer** – Fahrer sehen nur ihre eigenen Touren, ohne Preise, Kunden, Angebote und Rechnungen; Wechsel zwischen mehreren Instanzen
+- **Zwei-Faktor-Anmeldung** (Authenticator-App, TOTP) mit Wiederherstellungscodes; optional für Inhaber/Administratoren vorgeschrieben
 - Als App installierbar (PWA) auf iPhone/iPad/Android
 
 ## Technik
@@ -168,7 +191,7 @@ Standardmäßig werden die freien OpenStreetMap-Dienste verwendet ([Nominatim](h
 ### Kundenservice, E-Mail & öffentliche Seiten
 
 - **E-Mail-Versand** (Protokolle, Rechnungen, Angebote, Mahnungen, Einladungen, automatische Status-Mails, Benachrichtigung über neue Anfragen) läuft über SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. Ohne SMTP funktionieren alle Funktionen außer dem Versand.
-- **Öffentliche Seiten** ohne Anmeldung: Status-Link (`/t/…`), Anfrageformular (`/anfrage/…`) und Kalender-Abo (`/api/calendar/….ics`). Alle Links enthalten einen zufälligen, nicht erratbaren Schlüssel und lassen sich jederzeit deaktivieren bzw. erneuern. Links in E-Mails und Kalendern verwenden `APP_URL`.
+- **Öffentliche Seiten** ohne Anmeldung: Status-Link (`/t/…`), Anfrageformular (`/anfrage/…`), Angebot online annehmen (`/q/…`), Kundenportal (`/portal/…`), Bewertung (`/r/…`) und Kalender-Abo (`/api/calendar/….ics`). Alle Links enthalten einen zufälligen, nicht erratbaren Schlüssel und lassen sich jederzeit deaktivieren bzw. erneuern. Links in E-Mails und Kalendern verwenden `APP_URL`.
 - Anfrageformular aktivieren: Einstellungen → Kundenservice. Einbinden auf der eigenen Website per `<iframe src="…/anfrage/<schlüssel>?embed=1">` (Code wird dort angezeigt).
 
 ### E-Rechnung
