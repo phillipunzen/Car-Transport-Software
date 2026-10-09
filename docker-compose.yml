@@ -1,5 +1,5 @@
 # Startet App + MySQL. Konfiguration über eine .env-Datei (siehe .env.example).
-#   docker compose up -d --build
+#   docker compose up -d
 # Mehrere App-Instanzen: STORAGE_DRIVER=s3 setzen und
 #   docker compose up -d --scale app=3
 # (dann einen Load-Balancer/Reverse-Proxy vor die Instanzen schalten)
@@ -23,8 +23,8 @@ services:
       retries: 30
 
   app:
-    build: .
-    image: car-transport-software:latest
+    image: ghcr.io/phillipunzen/car-transport-software:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       db:
