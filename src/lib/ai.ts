@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { extractWithChatgpt } from "@/lib/chatgpt";
+import { extractWithCodex } from "@/lib/codex";
 
 /**
  * KI-Erkennung für Fahrzeugdaten und Belege: zentrale ChatGPT-Verbindung,
@@ -25,7 +26,8 @@ function toContent(file: Input): Anthropic.Beta.BetaContentBlockParam {
   return { type: "image", source: { type: "base64", media_type: mediaType, data } };
 }
 
-async function extract<S extends z.ZodType>(files: Input[], instruction: string, schema: S, useChatgpt = false): Promise<z.infer<S>> {
+async function extract<S extends z.ZodType>(files: Input[], instruction: string, schema: S, useChatgpt: boolean | "codex" = false): Promise<z.infer<S>> {
+  if (useChatgpt === "codex") return extractWithCodex(files, instruction, schema);
   if (useChatgpt) return extractWithChatgpt(files, instruction, schema);
   const response = await anthropic().beta.messages.parse({
     model: MODEL,
@@ -51,7 +53,7 @@ export const VehicleSchema = z.object({
   notes: z.string().nullable().describe("Kurzer Hinweis, falls etwas unsicher oder unleserlich war"),
 });
 
-export async function extractVehicle(files: Input[], useChatgpt = false) {
+export async function extractVehicle(files: Input[], useChatgpt: boolean | "codex" = false) {
   const result = await extract(
     files,
     `Du bekommst ein oder mehrere Fotos eines Fahrzeugs, des Kennzeichens, der Fahrgestellnummer (FIN/VIN),
@@ -93,7 +95,7 @@ export const ReceiptSchema = z.object({
   description: z.string().nullable().describe("Kurzbeschreibung, z.B. 'ICE Hamburg – München'"),
 });
 
-export async function extractReceipt(file: Input, useChatgpt = false) {
+export async function extractReceipt(file: Input, useChatgpt: boolean | "codex" = false) {
   return extract(
     [file],
     `Das ist ein Beleg (Quittung, Rechnung, Fahrkarte, Hotelrechnung o.ä.), der bei einer Fahrzeugüberführung angefallen ist.

@@ -1,5 +1,6 @@
 import { aiEnabled, extractReceipt, extractVehicle } from "@/lib/ai";
 import { hasChatgptPlan } from "@/lib/chatgpt";
+import { db } from "@/lib/db";
 import { extractPdfText, ocrEnabled, PREPROCESSING, recognizeText } from "@/lib/ocr";
 import {
   isCompleteRegistration,
@@ -16,9 +17,11 @@ import {
  * - KI (Claude), sobald ein ANTHROPIC_API_KEY hinterlegt ist
  * - sonst lokale Texterkennung (OCR) auf dem eigenen Server
  */
-export type RecognitionMode = "ai" | "chatgpt" | "ocr" | "off";
+export type RecognitionMode = "ai" | "chatgpt" | "codex" | "ocr" | "off";
 
 export async function recognitionMode(): Promise<RecognitionMode> {
+  const host = await db.chatgptHost.findUnique({ where: { id: "runtime" }, select: { aiProvider: true } });
+  if (host?.aiProvider === "codex") return "codex";
   if (await hasChatgptPlan()) return "chatgpt";
   if (aiEnabled()) return "ai";
   if (ocrEnabled()) return "ocr";
@@ -75,6 +78,7 @@ async function ocrReceipt(file: Input): Promise<ReceiptGuess> {
 
 export async function recognizeVehicle(files: Input[]): Promise<VehicleGuess> {
   const mode = await recognitionMode();
+  if (mode === "codex") return extractVehicle(files, "codex");
   if (mode === "ai" || mode === "chatgpt") return extractVehicle(files, mode === "chatgpt");
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrVehicle(files);
@@ -82,6 +86,7 @@ export async function recognizeVehicle(files: Input[]): Promise<VehicleGuess> {
 
 export async function recognizeReceipt(file: Input): Promise<ReceiptGuess> {
   const mode = await recognitionMode();
+  if (mode === "codex") return extractReceipt(file, "codex");
   if (mode === "ai" || mode === "chatgpt") return extractReceipt(file, mode === "chatgpt");
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrReceipt(file);

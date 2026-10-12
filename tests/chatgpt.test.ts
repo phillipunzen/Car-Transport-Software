@@ -105,7 +105,7 @@ describe("ChatGPT credential protection", () => {
     expect(fakeDb.chatgptProfile.update).toHaveBeenCalledWith({ where: { id: "legacy-1" }, data: { credentials: null, active: false } });
     const saved = fakeDb.chatgptAppProfile.upsert.mock.calls[0][0];
     expect(decryptCredentials(saved.update.credentials, "chatgpt-app:profile-1").access_token).toBe(credentials.access_token);
-    expect(fakeDb.chatgptHost.update).toHaveBeenCalledWith({ where: { id: "runtime" }, data: { activeProfileId: "profile-1" } });
+    expect(fakeDb.chatgptHost.update).toHaveBeenCalledWith({ where: { id: "runtime" }, data: { activeProfileId: "profile-1", aiProvider: "chatgpt", codexLoginId: null } });
   });
 
 });

@@ -7,7 +7,7 @@ import { uploadReceipt } from "@/app/(app)/orders/[id]/expenses/actions";
 import { enqueue, isNetworkError } from "@/lib/offline-queue";
 import { PendingUploads } from "@/components/pending-uploads";
 
-export function ReceiptUpload({ orderId, recognition }: { orderId: string; recognition: "ai" | "chatgpt" | "ocr" | "off" }) {
+export function ReceiptUpload({ orderId, recognition }: { orderId: string; recognition: "ai" | "chatgpt" | "codex" | "ocr" | "off" }) {
   const auto = recognition !== "off";
   const router = useRouter();
   const camera = useRef<HTMLInputElement>(null);
@@ -84,6 +84,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
         </button>
       </div>
       {recognition === "chatgpt" && <p className="text-xs text-slate-600">Die zentrale ChatGPT-Verbindung wird verwendet. <a href="/settings/ai" className="underline">KI-Status</a></p>}
+      {recognition === "codex" && <p className="text-xs text-slate-600">Das zentrale Codex-Konto wird verwendet. <a href="/settings/ai" className="underline">KI-Status</a></p>}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handle(e.target.files)} />
       <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {busy && <p className="text-sm text-brand-700">{busy}</p>}

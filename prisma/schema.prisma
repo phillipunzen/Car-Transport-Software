@@ -62,6 +62,9 @@ model ChatgptHost {
   id              String @id
   hostId          String
   activeProfileId String? @unique
+  aiProvider      String  @default("chatgpt")
+  codexModel      String?
+  codexLoginId    String?
 
   activeProfile ChatgptAppProfile? @relation(fields: [activeProfileId], references: [id], onDelete: SetNull)
 }

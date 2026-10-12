@@ -38,9 +38,28 @@ services:
       DATABASE_URL: mysql://app:${MYSQL_PASSWORD:-app-password-aendern}@db:3306/cartransport
       AUTH_TRUST_HOST: "true"
       UPLOAD_DIR: /data/uploads
+      CODEX_BRIDGE_URL: http://codex:3100
     volumes:
       - uploads:/data/uploads
+
+  # Private, shared Codex session. No app DB, uploads or API keys are mounted here.
+  codex:
+    image: ghcr.io/phillipunzen/car-transport-software:latest
+    pull_policy: always
+    restart: unless-stopped
+    entrypoint: ["node", "/app/scripts/codex-bridge.mjs"]
+    environment:
+      CODEX_BRIDGE_SECRET: ${CODEX_BRIDGE_SECRET:-${AUTH_SECRET:?AUTH_SECRET muss gesetzt sein}}
+      CODEX_APP_HOME: /data/codex
+    volumes:
+      - codex-session:/data/codex
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   db-data:
   uploads:
+  codex-session:

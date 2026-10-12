@@ -1,0 +1,4 @@
+ALTER TABLE `ChatgptHost`
+  ADD COLUMN `aiProvider` VARCHAR(191) NOT NULL DEFAULT 'chatgpt',
+  ADD COLUMN `codexModel` VARCHAR(191) NULL,
+  ADD COLUMN `codexLoginId` VARCHAR(191) NULL;

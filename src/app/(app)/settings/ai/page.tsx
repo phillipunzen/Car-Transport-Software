@@ -8,15 +8,25 @@ import { SettingsNav } from "@/components/settings-nav";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { disconnectConnection, importConnection, selectConnection, sharePersonalConnection } from "./actions";
+import { codexConfigured, completeCodexLogin, type CodexStatus } from "@/lib/codex";
+import { CodexDeviceLogin } from "@/components/codex-device-login";
+import { disconnectCodexConnection, selectCodexModel } from "./codex-actions";
 
-export const metadata = { title: "KI & ChatGPT" };
+export const metadata = { title: "KI, Codex & ChatGPT" };
 
 export default async function AiSettingsPage() {
   const ctx = await requireCtx();
   const editable = await canManageAppAi(ctx.user);
   if (editable) await chatgptHostId();
-  const host = await db.chatgptHost.findUnique({ where: { id: "runtime" }, select: { activeProfileId: true, activeProfile: { select: { credentials: true, model: true } } } });
-  const active = Boolean(host?.activeProfile?.credentials);
+  let codex: CodexStatus | null = null;
+  let codexError: string | undefined;
+  if (editable && codexConfigured()) {
+    try { codex = await completeCodexLogin(); }
+    catch { codexError = "Codex-Dienst gerade nicht erreichbar. Bitte die Serververbindung prüfen."; }
+  }
+  const host = await db.chatgptHost.findUnique({ where: { id: "runtime" }, select: { aiProvider: true, codexModel: true, activeProfileId: true, activeProfile: { select: { credentials: true, model: true } } } });
+  const active = host?.aiProvider !== "codex" && Boolean(host?.activeProfile?.credentials);
+  const codexActive = host?.aiProvider === "codex";
   // Ordinary users receive status only; account identity, registrations and credentials stay private.
   const profiles = editable ? await db.chatgptAppProfile.findMany({ orderBy: { createdAt: "asc" } }) : [];
   const personal = editable ? await db.chatgptProfile.findMany({ where: { userId: ctx.user.id, credentials: { not: null } }, select: { id: true, email: true } }) : [];
@@ -33,13 +43,34 @@ export default async function AiSettingsPage() {
   }));
   return (
     <>
-      <PageHeader title="KI & ChatGPT" subtitle="Gemeinsame KI für Fahrzeugfotos, Kfz-Scheine und Belege in der ganzen App." />
+      <PageHeader title="KI, Codex & ChatGPT" subtitle="Gemeinsame KI für Fahrzeugfotos, Kfz-Scheine und Belege in der ganzen App." />
       <SettingsNav active="ai" driver={ctx.role === "DRIVER"} fleet={ctx.org.moduleFleet} />
       <div className="space-y-6">
+        <Card title="Codex per Device Code">
+          <p className="text-sm text-slate-600">Ein Codex-Konto für Fahrzeugbilder, Kfz-Scheine und Belege in allen Mandanten. Alle Benutzer teilen das Kontingent des verbundenen Kontos. Die Anmeldung bestätigst du direkt bei OpenAI mit einem Einmalcode.</p>
+          <p className="mt-3 text-sm font-medium">{codexActive ? `Codex ist für die ganze App ausgewählt. Modell: ${host.codexModel ?? "bitte auswählen"}` : "Codex ist derzeit nicht für die Erkennung ausgewählt."}</p>
+          <p className="mt-3 text-sm text-slate-600">Bei einem Limit oder Verbindungsfehler bleibt die Eingabe manuell möglich. Es wird keine kostenpflichtige API als Ersatz aufgerufen.</p>
+          {!editable && <p className="mt-3 text-sm text-slate-600">Die Anmeldung und Modellauswahl übernimmt der App-Administrator.</p>}
+          {editable && <>
+            {codexError && <p className="mt-3 text-sm text-amber-800">{codexError}</p>}
+            {!codexConfigured() ? <p className="mt-3 text-sm text-slate-600">Der Codex-Dienst muss auf dem Server eingerichtet werden. Die Docker-Compose-Konfiguration enthält den Dienst; seine Verbindung ist in der README beschrieben.</p> : <>
+              {codex?.connected && <>
+                <p className="mt-3 text-sm">Verbunden: {codex.email ?? "ChatGPT-Konto"} · {codex.planType}</p>
+                {!!codex.models.length && <ActionForm action={selectCodexModel} className="mt-4 flex flex-wrap items-end gap-3">
+                  <label>Modell<select name="model" defaultValue={host?.codexModel ?? (codex.models.find((m) => m.isDefault) ?? codex.models[0]).model} className="input mt-1">{codex.models.map((m) => <option key={m.model} value={m.model}>{m.displayName}</option>)}</select></label>
+                  <SubmitButton>Codex für alle verwenden</SubmitButton>
+                </ActionForm>}
+                <ActionForm action={disconnectCodexConnection} className="mt-4"><SubmitButton className="btn-secondary">Codex abmelden</SubmitButton></ActionForm>
+              </>}
+              <CodexDeviceLogin initialLogin={codex?.login} />
+              <p className="mt-3 text-xs text-slate-500">Falls OpenAI die Anmeldung ablehnt: Device-Code-Anmeldung in den ChatGPT-Sicherheitseinstellungen oder Workspace-Berechtigungen aktivieren.</p>
+            </>}
+          </>}
+        </Card>
         <Card title="Zentrale ChatGPT-Verbindung">
           <p className="text-sm text-slate-600">Eine zentral eingerichtete Verbindung wird für alle Benutzer und alle Mandanten verwendet. Jeder kann seine berechtigten Fahrzeugfotos, Kfz-Scheine und Belege auslesen lassen; eine eigene ChatGPT-Anmeldung ist dafür nicht nötig. Alle Anfragen teilen die Limits und gegebenenfalls das freigegebene Guthaben des verbundenen Kontos.</p>
           <p className="mt-3 text-sm text-slate-600">Zum Auslesen werden nur die jeweils ausgewählten Fotos und PDFs an OpenAI übertragen. Aufträge und Dokumente bleiben durch die bestehenden Mandantenrechte geschützt.</p>
-          <p className="mt-3 text-sm font-medium">{active ? `Zentrale ChatGPT-Erkennung ist aktiv.${host?.activeProfile?.model ? ` Modell: ${host.activeProfile.model}` : ""}` : "Keine zentrale ChatGPT-Verbindung aktiv. Es gilt die Erkennung über den Server (Claude oder lokale OCR)."}</p>
+          <p className="mt-3 text-sm font-medium">{active ? `Zentrale ChatGPT-Erkennung ist aktiv.${host?.activeProfile?.model ? ` Modell: ${host.activeProfile.model}` : ""}` : codexActive ? "Für die Erkennung ist Codex ausgewählt." : "Keine zentrale ChatGPT-Verbindung aktiv. Es gilt die Erkennung über den Server (Claude oder lokale OCR)."}</p>
           {active && <p className="mt-3 text-sm text-slate-600">Bei einem Nutzungslimit wird keine kostenpflichtige API als Ersatz aufgerufen. Du kannst die Werte weiterhin manuell eintragen.</p>}
           {!editable && <p className="mt-3 text-sm text-slate-600">Die Einrichtung, Modellauswahl und Verwaltung übernimmt der App-Administrator.</p>}
           {editable && <>
@@ -72,7 +103,7 @@ export default async function AiSettingsPage() {
         </Card>)}
         {entries.map((profile, i) => (
           <Card key={profile.id} title={`App-Verbindung ${i + 1} · ${profile.email}`}>
-            <p className="mb-3 text-sm">{host?.activeProfileId === profile.id && profile.connected ? "Aktiv für alle Benutzer und Mandanten." : profile.connected ? "Verbunden – derzeit nicht ausgewählt." : "Getrennt – erneut anmelden, um diese Verbindung zu verwenden."}</p>
+            <p className="mb-3 text-sm">{active && host?.activeProfileId === profile.id && profile.connected ? "Aktiv für alle Benutzer und Mandanten." : profile.connected ? "Verbunden – derzeit nicht ausgewählt." : "Getrennt – erneut anmelden, um diese Verbindung zu verwenden."}</p>
             {profile.error && <p className="mb-3 text-sm text-amber-800">{profile.error}</p>}
             {!!profile.models.length && (
               <ActionForm action={selectConnection} className="mb-4 flex flex-wrap items-end gap-3">

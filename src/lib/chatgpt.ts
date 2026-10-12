@@ -57,7 +57,7 @@ async function saveAppProfile(tx: Prisma.TransactionClient, credentials: Chatgpt
     create: { id, clientId: credentials.client_id, subject: credentials.subject, email: credentials.email, credentials: encrypted, model: preferredModel },
     update: { credentials: encrypted, email: credentials.email, model: preferredModel },
   });
-  await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profile.id } });
+  await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profile.id, aiProvider: "chatgpt", codexLoginId: null } });
 }
 
 export async function importChatgptProfile(raw: unknown) {
@@ -124,7 +124,7 @@ export async function chooseChatgptProfile(profileId: string, model: string) {
     const profile = await tx.chatgptAppProfile.findUnique({ where: { id: profileId } });
     if (!profile?.credentials) throw new Error("Die Verbindung wurde inzwischen getrennt. Bitte erneut anmelden.");
     await tx.chatgptAppProfile.update({ where: { id: profileId }, data: { model } });
-    await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profileId } });
+    await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profileId, aiProvider: "chatgpt", codexLoginId: null } });
   }, transactionOptions);
 }
 
