@@ -68,7 +68,7 @@ export default async function AiSettingsPage() {
         </Card>
         <Card title="Zentrale ChatGPT-Verbindung">
           <p className="text-sm text-slate-600">Eine zentral eingerichtete Verbindung wird für alle Benutzer und alle Mandanten verwendet. Jeder kann seine berechtigten Fahrzeugfotos, Kfz-Scheine und Belege auslesen lassen; eine eigene ChatGPT-Anmeldung ist dafür nicht nötig. Alle Anfragen teilen die Limits und gegebenenfalls das freigegebene Guthaben des verbundenen Kontos.</p>
-          <p className="mt-3 text-sm text-slate-600">Zum Auslesen werden nur die jeweils ausgewählten Fotos und PDFs an OpenAI übertragen. Aufträge und Dokumente bleiben durch die bestehenden Mandantenrechte geschützt.</p>
+          <p className="mt-3 text-sm text-slate-600">Aufträge und Dokumente bleiben durch die bestehenden Mandantenrechte geschützt.</p>
           <p className="mt-3 text-sm font-medium">{active ? `Zentrale ChatGPT-Erkennung ist aktiv.${host?.activeProfile?.model ? ` Modell: ${host.activeProfile.model}` : ""}` : codexActive ? "Für die Erkennung ist Codex ausgewählt." : "Keine zentrale ChatGPT-Verbindung aktiv. Es gilt die Erkennung über den Server (Claude oder lokale OCR)."}</p>
           {active && <p className="mt-3 text-sm text-slate-600">Bei einem Nutzungslimit wird keine kostenpflichtige API als Ersatz aufgerufen. Du kannst die Werte weiterhin manuell eintragen.</p>}
           {!editable && <p className="mt-3 text-sm text-slate-600">Die Einrichtung, Modellauswahl und Verwaltung übernimmt der App-Administrator.</p>}
@@ -86,7 +86,7 @@ export default async function AiSettingsPage() {
               <p className="mt-3 text-xs text-slate-500">Für ein weiteres Konto: <code>node chatgpt-login.mjs --new-account</code>. Für eine gespeicherte Verbindung die unten angezeigte Anmeldung verwenden.</p>
               <ActionForm action={importConnection} resetOnSuccess className="mt-4 space-y-3">
                 <label className="block">Verbindungsdatei<input name="connection" type="file" accept=".json,application/json" required className="input mt-1" /></label>
-                <label className="flex items-start gap-2 text-sm font-normal"><input name="consent" type="checkbox" required className="mt-1 h-4 w-4" /><span>Ich möchte diese Verbindung für alle Benutzer und Mandanten freigeben. Die jeweils ausgewählten Fotos und Belege werden zum Auslesen an OpenAI übertragen und verbrauchen das Kontingent des verbundenen Kontos.</span></label>
+                <label className="flex items-start gap-2 text-sm font-normal"><input name="consent" type="checkbox" required className="mt-1 h-4 w-4" /><span>Ich möchte diese Verbindung für alle Benutzer und Mandanten freigeben. Die Nutzung verbraucht das Kontingent des verbundenen Kontos.</span></label>
                 <SubmitButton>Für die ganze App verbinden</SubmitButton>
               </ActionForm>
             </details>

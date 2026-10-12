@@ -62,7 +62,7 @@ export function CodexDeviceLogin({ initialLogin = null }: { initialLogin?: Codex
       <p role="status" className="text-sm text-slate-600">Warte auf die Bestätigung … Diese Seite erkennt die Anmeldung automatisch.</p>
       <button type="button" className="btn-secondary" disabled={busy} onClick={cancel}>Abbrechen</button>
     </> : <>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-4 w-4" /><span>Dieses Codex-Konto und sein Kontingent für alle Benutzer und Mandanten verwenden. Ausgewählte Bilder und Dokumente werden zum Auslesen an OpenAI übertragen.</span></label>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-4 w-4" /><span>Dieses Codex-Konto und sein Kontingent für alle Benutzer und Mandanten verwenden.</span></label>
       <button type="button" className="btn-primary" disabled={busy || !consent} onClick={start}>{busy ? "Code wird angefordert …" : "Codex per Device Code verbinden"}</button>
     </>}
   </div>;
