@@ -39,7 +39,7 @@ model User {
   chatgptProfiles     ChatgptProfile[]
 }
 
-// ChatGPT plan connections belong to the individual user, never to a tenant.
+// Legacy personal connections can be explicitly transferred by their owner.
 model ChatgptProfile {
   id          String   @id @default(cuid())
   userId      String
@@ -59,8 +59,25 @@ model ChatgptProfile {
 }
 
 model ChatgptHost {
-  id     String @id
-  hostId String
+  id              String @id
+  hostId          String
+  activeProfileId String? @unique
+
+  activeProfile ChatgptAppProfile? @relation(fields: [activeProfileId], references: [id], onDelete: SetNull)
+}
+
+// Shared application connections persist independently of user/tenant accounts.
+model ChatgptAppProfile {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  subject     String
+  email       String
+  credentials String?  @db.MediumText
+  model       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  host ChatgptHost?
 }
 
 model Account {

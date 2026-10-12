@@ -46,10 +46,10 @@ export function decryptCredentials(value: string, userId: string): ChatgptCreden
 
 export function chatgptError(code?: string): string {
   if (code === "subscription_sharing_usage_limit_exceeded" || code === "subscription_sharing_usage_unavailable" || code === "rate_limit_exceeded") {
-    return "Das ChatGPT-Nutzungslimit ist erreicht oder dein Abo ist hier nicht verfügbar. Bitte Nutzung unter Einstellungen → KI → Nutzung verwalten prüfen.";
+    return "Das ChatGPT-Nutzungslimit ist erreicht oder die zentrale Verbindung ist hier nicht verfügbar. Bitte den App-Administrator bitten, die Nutzung unter Einstellungen → KI zu prüfen.";
   }
-  if (code === "invalid_grant" || code === "invalid_token" || code === "authentication_error") return "Bitte deine ChatGPT-Verbindung unter Einstellungen → KI erneut herstellen.";
-  return "Die ChatGPT-Erkennung ist fehlgeschlagen. Bitte Verbindung und Modellauswahl unter Einstellungen → KI prüfen.";
+  if (code === "invalid_grant" || code === "invalid_token" || code === "authentication_error") return "Bitte den App-Administrator bitten, die zentrale ChatGPT-Verbindung unter Einstellungen → KI erneut herzustellen.";
+  return "Die ChatGPT-Erkennung ist fehlgeschlagen. Bitte den App-Administrator bitten, Verbindung und Modellauswahl unter Einstellungen → KI zu prüfen.";
 }
 
 /** Read SSE through its terminal event; a partial answer must never become saved data. */

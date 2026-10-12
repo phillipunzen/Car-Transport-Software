@@ -1,27 +1,23 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { CHATGPT_ISSUER, CHATGPT_RESOURCE, CredentialsSchema, chatgptError, decryptCredentials, encryptCredentials, readChatgptStream } from "@/lib/chatgpt-protocol";
+import { CHATGPT_ISSUER, CHATGPT_RESOURCE, CredentialsSchema, chatgptError, decryptCredentials, encryptCredentials, readChatgptStream, type ChatgptCredentials } from "@/lib/chatgpt-protocol";
 
 const jwks = createRemoteJWKSet(new URL(`${CHATGPT_ISSUER}/.well-known/jwks.json`));
 const TokenSchema = z.object({
-  access_token: z.string().min(1),
-  refresh_token: z.string().min(1).optional(),
-  id_token: z.string().optional(),
-  expires_in: z.number().int().positive(),
-  scope: z.string().optional(),
-  token_type: z.literal("Bearer"),
+  access_token: z.string().min(1), refresh_token: z.string().min(1).optional(), id_token: z.string().optional(),
+  expires_in: z.number().int().positive(), scope: z.string().optional(), token_type: z.literal("Bearer"),
 });
 export const ModelCatalogSchema = z.object({ models: z.array(z.object({ slug: z.string(), display_name: z.string(), visibility: z.string() })) });
+const transactionOptions = { maxWait: 30000, timeout: 90000 };
+const credentialContext = (profileId: string) => `chatgpt-app:${profileId}`;
 
 async function checkedFetch(url: string, init: RequestInit, timeout = 20000) {
   let response;
-  try {
-    response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(timeout) });
-  } catch {
-    throw new Error("ChatGPT ist gerade nicht erreichbar. Bitte erneut versuchen.");
-  }
+  try { response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(timeout) }); }
+  catch { throw new Error("ChatGPT ist gerade nicht erreichbar. Bitte erneut versuchen."); }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(chatgptError(typeof body.error === "string" ? body.error : body.error?.code ?? (response.status === 401 ? "invalid_token" : response.status === 429 ? "rate_limit_exceeded" : undefined)));
@@ -34,8 +30,16 @@ export async function chatgptHostId() {
   return host.hostId;
 }
 
-export async function hasChatgptPlan(userId: string) {
-  return Boolean(await db.chatgptProfile.findFirst({ where: { userId, active: true, credentials: { not: null } }, select: { id: true } }));
+/** A singleton row serializes selection, import, disconnect and refresh across containers. */
+async function lockHost(tx: Prisma.TransactionClient) {
+  const rows = await tx.$queryRaw<{ activeProfileId: string | null }[]>`SELECT activeProfileId FROM ChatgptHost WHERE id = ${"runtime"} FOR UPDATE`;
+  if (!rows[0]) throw new Error("Bitte zuerst die zentrale ChatGPT-Verbindung einrichten.");
+  return rows[0];
+}
+
+export async function hasChatgptPlan() {
+  const host = await db.chatgptHost.findUnique({ where: { id: "runtime" }, select: { activeProfile: { select: { credentials: true } } } });
+  return Boolean(host?.activeProfile?.credentials);
 }
 
 export async function listChatgptModels(accessToken: string) {
@@ -43,79 +47,95 @@ export async function listChatgptModels(accessToken: string) {
   return ModelCatalogSchema.parse(await response.json()).models.filter((m) => m.visibility === "list");
 }
 
-export async function importChatgptProfile(userId: string, raw: unknown) {
-  const credentials = CredentialsSchema.parse(raw);
-  const { payload } = await jwtVerify(credentials.id_token, jwks, {
-    issuer: CHATGPT_ISSUER, audience: credentials.client_id,
-    requiredClaims: ["sub", "exp", "iat", "nonce"], clockTolerance: 5,
+async function saveAppProfile(tx: Prisma.TransactionClient, credentials: ChatgptCredentials, preferredModel: string | null) {
+  const existing = await tx.chatgptAppProfile.findUnique({ where: { clientId: credentials.client_id } });
+  if (existing && existing.subject !== credentials.subject) throw new Error("Die gespeicherte ChatGPT-Verbindung gehört zu einem anderen Konto.");
+  const id = existing?.id ?? randomUUID();
+  const encrypted = encryptCredentials(credentials, credentialContext(id));
+  const profile = await tx.chatgptAppProfile.upsert({
+    where: { clientId: credentials.client_id },
+    create: { id, clientId: credentials.client_id, subject: credentials.subject, email: credentials.email, credentials: encrypted, model: preferredModel },
+    update: { credentials: encrypted, email: credentials.email, model: preferredModel },
   });
-  if (payload.sub !== credentials.subject || payload.email !== credentials.email || payload.nonce !== credentials.nonce) {
-    throw new Error("Die ChatGPT-Identität stimmt nicht mit der Verbindungsdatei überein.");
-  }
-  // Only freshly transferred sessions can be imported; the server owns subsequent refreshes.
-  const savedAt = Date.parse(credentials.saved_at);
-  if (savedAt > Date.now() + 5000 || savedAt + credentials.expires_in * 1000 <= Date.now() + 60000) {
-    throw new Error("Die Verbindungsdatei ist abgelaufen. Bitte das Anmeldeprogramm erneut ausführen.");
-  }
-  const models = await listChatgptModels(credentials.access_token);
-  if (!models.length) throw new Error("Für dieses ChatGPT-Konto sind keine Modelle verfügbar.");
-  const encrypted = encryptCredentials({ ...credentials, ext_agent_host_id: await chatgptHostId() }, userId);
-  await db.$transaction(async (tx) => {
-    const existing = await tx.chatgptProfile.findUnique({ where: { userId_clientId: { userId, clientId: credentials.client_id } } });
-    if (existing && existing.subject !== credentials.subject) throw new Error("Die gespeicherte ChatGPT-Verbindung gehört zu einem anderen Konto.");
-    await tx.chatgptProfile.updateMany({ where: { userId }, data: { active: false } });
-    await tx.chatgptProfile.upsert({
-      where: { userId_clientId: { userId, clientId: credentials.client_id } },
-      create: { userId, clientId: credentials.client_id, subject: credentials.subject, email: credentials.email, credentials: encrypted, active: true, model: models[0].slug },
-      update: { credentials: encrypted, active: true, email: credentials.email, model: existing?.model && models.some((m) => m.slug === existing.model) ? existing.model : models[0].slug },
-    });
-  });
+  await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profile.id } });
 }
 
-/** MySQL row lock serializes rotating refresh tokens across all app instances. */
-export async function chatgptSession(userId: string, profileId?: string) {
+export async function importChatgptProfile(raw: unknown) {
+  const credentials = CredentialsSchema.parse(raw);
+  const { payload } = await jwtVerify(credentials.id_token, jwks, {
+    issuer: CHATGPT_ISSUER, audience: credentials.client_id, requiredClaims: ["sub", "exp", "iat", "nonce"], clockTolerance: 5,
+  });
+  if (payload.sub !== credentials.subject || payload.email !== credentials.email || payload.nonce !== credentials.nonce) throw new Error("Die ChatGPT-Identität stimmt nicht mit der Verbindungsdatei überein.");
+  const savedAt = Date.parse(credentials.saved_at);
+  if (savedAt > Date.now() + 5000 || savedAt + credentials.expires_in * 1000 <= Date.now() + 60000) throw new Error("Die Verbindungsdatei ist abgelaufen. Bitte das Anmeldeprogramm erneut ausführen.");
+  const models = await listChatgptModels(credentials.access_token);
+  if (!models.length) throw new Error("Für dieses ChatGPT-Konto sind keine Modelle verfügbar.");
+  const hostId = await chatgptHostId();
+  await db.$transaction(async (tx) => {
+    await lockHost(tx);
+    const existing = await tx.chatgptAppProfile.findUnique({ where: { clientId: credentials.client_id } });
+    const model = existing?.model && models.some((m) => m.slug === existing.model) ? existing.model : models[0].slug;
+    await saveAppProfile(tx, { ...credentials, ext_agent_host_id: hostId }, model);
+  }, transactionOptions);
+}
+
+/** Explicit transfer only; never make another user's previously personal session public. */
+export async function sharePersonalChatgptProfile(userId: string, profileId: string) {
+  const hostId = await chatgptHostId();
+  await db.$transaction(async (tx) => {
+    await lockHost(tx);
+    const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ChatgptProfile WHERE userId = ${userId} AND id = ${profileId} FOR UPDATE`;
+    const personal = rows[0] ? await tx.chatgptProfile.findUnique({ where: { id: rows[0].id } }) : null;
+    if (!personal?.credentials) throw new Error("Persönliche Verbindung nicht gefunden. Bitte erneut anmelden.");
+    const credentials = decryptCredentials(personal.credentials, userId);
+    await saveAppProfile(tx, { ...credentials, ext_agent_host_id: hostId }, personal.model);
+    // Only one runtime may own this rotating session after the transfer.
+    await tx.chatgptProfile.update({ where: { id: personal.id }, data: { credentials: null, active: false } });
+  }, transactionOptions);
+}
+
+export async function chatgptSession(profileId?: string) {
   return db.$transaction(async (tx) => {
-    const rows = profileId
-      ? await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ChatgptProfile WHERE userId = ${userId} AND id = ${profileId} FOR UPDATE`
-      : await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ChatgptProfile WHERE userId = ${userId} AND active = true FOR UPDATE`;
-    const profile = rows[0] ? await tx.chatgptProfile.findUnique({ where: { id: rows[0].id } }) : null;
-    if (!profile?.credentials) throw new Error("Bitte zuerst unter Einstellungen → KI mit ChatGPT verbinden.");
-    let credentials = decryptCredentials(profile.credentials, userId);
+    const host = await lockHost(tx);
+    const selected = profileId ?? host.activeProfileId;
+    const profile = selected ? await tx.chatgptAppProfile.findUnique({ where: { id: selected } }) : null;
+    if (!profile?.credentials) throw new Error("Bitte den App-Administrator bitten, unter Einstellungen → KI die zentrale ChatGPT-Verbindung einzurichten.");
+    let credentials = decryptCredentials(profile.credentials, credentialContext(profile.id));
     if (Date.parse(credentials.saved_at) + credentials.expires_in * 1000 < Date.now() + 60000) {
       const response = await checkedFetch(`${CHATGPT_ISSUER}/api/accounts/oauth/token`, {
         method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ grant_type: "refresh_token", client_id: profile.clientId, refresh_token: credentials.refresh_token, resource: CHATGPT_RESOURCE }),
       });
       const refreshed = TokenSchema.parse(await response.json());
-      credentials = CredentialsSchema.parse({
-        ...credentials, ...refreshed, scopes: refreshed.scope ? refreshed.scope.split(" ") : credentials.scopes,
-        refresh_token: refreshed.refresh_token ?? credentials.refresh_token, saved_at: new Date().toISOString(),
-      });
-      await tx.chatgptProfile.update({ where: { id: profile.id }, data: { credentials: encryptCredentials(credentials, userId) } });
+      credentials = CredentialsSchema.parse({ ...credentials, ...refreshed, scopes: refreshed.scope ? refreshed.scope.split(" ") : credentials.scopes,
+        refresh_token: refreshed.refresh_token ?? credentials.refresh_token, saved_at: new Date().toISOString() });
+      await tx.chatgptAppProfile.update({ where: { id: profile.id }, data: { credentials: encryptCredentials(credentials, credentialContext(profile.id)) } });
     }
     return { profile, credentials };
-  }, { maxWait: 30000, timeout: 90000 });
+  }, transactionOptions);
 }
 
-export async function chooseChatgptProfile(userId: string, profileId: string, model: string) {
-  const { credentials } = await chatgptSession(userId, profileId);
+export async function chooseChatgptProfile(profileId: string, model: string) {
+  const { credentials } = await chatgptSession(profileId);
   const models = await listChatgptModels(credentials.access_token);
-  if (!models.some((m) => m.slug === model)) throw new Error("Dieses Modell ist für dein ChatGPT-Konto nicht verfügbar.");
+  if (!models.some((m) => m.slug === model)) throw new Error("Dieses Modell ist für das verbundene ChatGPT-Konto nicht verfügbar.");
   await db.$transaction(async (tx) => {
-    await tx.chatgptProfile.updateMany({ where: { userId }, data: { active: false } });
-    await tx.chatgptProfile.update({ where: { id: profileId, userId }, data: { active: true, model } });
-  });
+    await lockHost(tx);
+    const profile = await tx.chatgptAppProfile.findUnique({ where: { id: profileId } });
+    if (!profile?.credentials) throw new Error("Die Verbindung wurde inzwischen getrennt. Bitte erneut anmelden.");
+    await tx.chatgptAppProfile.update({ where: { id: profileId }, data: { model } });
+    await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: profileId } });
+  }, transactionOptions);
 }
 
-export async function disconnectChatgptProfile(userId: string, profileId: string) {
+export async function disconnectChatgptProfile(profileId: string) {
   return db.$transaction(async (tx) => {
-    // Wait for in-flight refreshes before revoking the latest rotating token.
-    const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ChatgptProfile WHERE userId = ${userId} AND id = ${profileId} FOR UPDATE`;
-    const profile = rows[0] ? await tx.chatgptProfile.findUnique({ where: { id: rows[0].id } }) : null;
+    const host = await lockHost(tx);
+    const profile = await tx.chatgptAppProfile.findUnique({ where: { id: profileId } });
     if (!profile) throw new Error("Verbindung nicht gefunden.");
     let revoked = !profile.credentials;
     if (profile.credentials) {
-      const credentials = decryptCredentials(profile.credentials, userId);
+      const credentials = decryptCredentials(profile.credentials, credentialContext(profile.id));
       try {
         const discovery = await checkedFetch(`${CHATGPT_ISSUER}/.well-known/openid-configuration`, {}, 5000);
         const endpoint = new URL((await discovery.json()).revocation_endpoint);
@@ -125,20 +145,19 @@ export async function disconnectChatgptProfile(userId: string, profileId: string
             await checkedFetch(endpoint.href, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token: credentials.refresh_token, token_type_hint: "refresh_token", client_id: profile.clientId }) }, 5000);
             revoked = true;
             break;
-          } catch {
-            if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300));
-          }
+          } catch { if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300)); }
         }
       } catch { /* Report unconfirmed revocation without exposing tokens. */ }
     }
-    await tx.chatgptProfile.update({ where: { id: profile.id, userId }, data: { active: false, credentials: null } });
+    await tx.chatgptAppProfile.update({ where: { id: profile.id }, data: { credentials: null } });
+    if (host.activeProfileId === profile.id) await tx.chatgptHost.update({ where: { id: "runtime" }, data: { activeProfileId: null } });
     return revoked;
-  }, { maxWait: 30000, timeout: 90000 });
+  }, transactionOptions);
 }
 
-export async function extractWithChatgpt<S extends z.ZodType>(userId: string, files: { data: Buffer; mimeType: string }[], instruction: string, schema: S): Promise<z.infer<S>> {
-  const { profile, credentials } = await chatgptSession(userId);
-  if (!profile.model) throw new Error("Bitte unter Einstellungen → KI ein Modell auswählen.");
+export async function extractWithChatgpt<S extends z.ZodType>(files: { data: Buffer; mimeType: string }[], instruction: string, schema: S): Promise<z.infer<S>> {
+  const { profile, credentials } = await chatgptSession();
+  if (!profile.model) throw new Error("Bitte den App-Administrator bitten, unter Einstellungen → KI ein Modell auszuwählen.");
   const content = files.map((file) => {
     if (file.mimeType === "application/pdf") return { type: "input_file", filename: "document.pdf", file_data: `data:application/pdf;base64,${file.data.toString("base64")}` };
     if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimeType)) throw new Error("Bitte ein Bild oder eine PDF-Datei verwenden.");

@@ -83,7 +83,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
           Datei / PDF hochladen
         </button>
       </div>
-      {recognition === "chatgpt" && <p className="text-xs text-slate-600">Dein ChatGPT-Abo wird verwendet. <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer" className="underline">Nutzung verwalten</a></p>}
+      {recognition === "chatgpt" && <p className="text-xs text-slate-600">Die zentrale ChatGPT-Verbindung wird verwendet. <a href="/settings/ai" className="underline">KI-Status</a></p>}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handle(e.target.files)} />
       <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {busy && <p className="text-sm text-brand-700">{busy}</p>}

@@ -48,10 +48,10 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
 
   let extracted: Awaited<ReturnType<typeof recognizeReceipt>> | null = null;
   let warning: string | undefined;
-  const mode = await recognitionMode(ctx.user.id);
+  const mode = await recognitionMode();
   if (mode !== "off") {
     try {
-      const result = await recognizeReceipt({ data: saved.data, mimeType: saved.record.mimeType }, ctx.user.id);
+      const result = await recognizeReceipt({ data: saved.data, mimeType: saved.record.mimeType });
       // Nur als "erkannt" werten, wenn tatsächlich etwas gefunden wurde
       if (result.amountGross !== null || result.vendor || result.date) extracted = result;
     } catch (e) {
