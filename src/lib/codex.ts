@@ -11,12 +11,15 @@ const LoginSchema = z.object({
 const StatusSchema = z.object({ connected: z.boolean(), email: z.string().nullable(), planType: z.string().nullable(), models: z.array(ModelSchema), login: LoginSchema.nullable() });
 export type CodexStatus = z.infer<typeof StatusSchema>;
 export type CodexLogin = z.infer<typeof LoginSchema>;
-export const codexConfigured = () => Boolean(process.env.CODEX_BRIDGE_URL && (process.env.CODEX_BRIDGE_SECRET || process.env.AUTH_SECRET));
+// The repository's Compose service is the default, including older deployments
+// that update the image without adding CODEX_BRIDGE_URL to their app environment.
+const bridgeUrl = () => process.env.CODEX_BRIDGE_URL?.trim() || "http://codex:3100";
+export const codexConfigured = () => (process.env.CODEX_BRIDGE_SECRET || process.env.AUTH_SECRET || "").length >= 32;
 
 async function bridgeRequest(route: string, body: unknown = {}, timeout = 30000) {
-  const base = process.env.CODEX_BRIDGE_URL;
+  const base = bridgeUrl();
   const secret = process.env.CODEX_BRIDGE_SECRET || process.env.AUTH_SECRET;
-  if (!base || !secret || secret.length < 32) throw new Error("Der Codex-Dienst ist noch nicht eingerichtet. Bitte CODEX_BRIDGE_URL und den gemeinsamen Dienstschlüssel auf dem Server konfigurieren.");
+  if (!secret || secret.length < 32) throw new Error("Für die Codex-Anmeldung muss AUTH_SECRET oder CODEX_BRIDGE_SECRET auf dem Server mindestens 32 Zeichen enthalten.");
   let response;
   try {
     response = await fetch(new URL(route, base), {

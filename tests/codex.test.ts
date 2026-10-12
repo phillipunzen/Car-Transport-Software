@@ -8,7 +8,7 @@ vi.mock("@/lib/chatgpt", () => ({ chatgptHostId: mocks.hostId, hasChatgptPlan: m
 vi.mock("@/lib/org", () => ({ requireCtx: mocks.ctx }));
 vi.mock("@/lib/chatgpt-admin", () => ({ canManageAppAi: mocks.admin }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
-import { completeCodexLogin, extractWithCodex, chooseCodexModel, startCodexLogin } from "../src/lib/codex";
+import { completeCodexLogin, extractWithCodex, chooseCodexModel, startCodexLogin, codexConfigured, codexStatus } from "../src/lib/codex";
 import { recognizeVehicle, recognizeReceipt } from "../src/lib/recognition";
 import { cancelDeviceLogin, disconnectCodexConnection, pollDeviceLogin, selectCodexModel, startDeviceLogin } from "../src/app/(app)/settings/ai/codex-actions";
 
@@ -25,6 +25,25 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("Codex device login", () => {
+  it("uses the Compose service and AUTH_SECRET when older app environments have no Codex variables", async () => {
+    vi.stubEnv("CODEX_BRIDGE_URL", "");
+    vi.stubEnv("CODEX_BRIDGE_SECRET", "");
+    vi.stubEnv("AUTH_SECRET", "existing-auth-secret-at-least-32-characters");
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(status)));
+    vi.stubGlobal("fetch", fetch);
+    expect(codexConfigured()).toBe(true);
+    await codexStatus();
+    expect(fetch.mock.calls[0][0].href).toBe("http://codex:3100/status");
+    expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer existing-auth-secret-at-least-32-characters");
+  });
+  it("does not treat a missing or short server key as a configured connection", async () => {
+    vi.stubEnv("CODEX_BRIDGE_SECRET", "");
+    vi.stubEnv("AUTH_SECRET", "short");
+    expect(codexConfigured()).toBe(false);
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    await expect(codexStatus()).rejects.toThrow("mindestens 32 Zeichen");
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("rejects every management action before contacting the Codex service", async () => {
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
     const results = await Promise.all([startDeviceLogin(true), pollDeviceLogin(), cancelDeviceLogin("other-login"), selectCodexModel(undefined, new FormData()), disconnectCodexConnection()]);

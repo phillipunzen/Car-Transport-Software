@@ -29,6 +29,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      codex:
+        condition: service_healthy
     ports:
       - "${APP_PORT:-3000}:3000"
     env_file:
@@ -39,6 +41,7 @@ services:
       AUTH_TRUST_HOST: "true"
       UPLOAD_DIR: /data/uploads
       CODEX_BRIDGE_URL: http://codex:3100
+      CODEX_BRIDGE_SECRET: ${CODEX_BRIDGE_SECRET:-${AUTH_SECRET:?AUTH_SECRET muss gesetzt sein}}
     volumes:
       - uploads:/data/uploads
 

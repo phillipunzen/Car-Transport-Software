@@ -53,7 +53,7 @@ export default async function AiSettingsPage() {
           {!editable && <p className="mt-3 text-sm text-slate-600">Die Anmeldung und Modellauswahl übernimmt der App-Administrator.</p>}
           {editable && <>
             {codexError && <p className="mt-3 text-sm text-amber-800">{codexError}</p>}
-            {!codexConfigured() ? <p className="mt-3 text-sm text-slate-600">Der Codex-Dienst muss auf dem Server eingerichtet werden. Die Docker-Compose-Konfiguration enthält den Dienst; seine Verbindung ist in der README beschrieben.</p> : <>
+            {!codexConfigured() && <p className="mt-3 text-sm text-amber-800">Für die Anmeldung fehlt ein gültiger Server-Schlüssel. Bitte die App-Konfiguration prüfen.</p>}
               {codex?.connected && <>
                 <p className="mt-3 text-sm">Verbunden: {codex.email ?? "ChatGPT-Konto"} · {codex.planType}</p>
                 {!!codex.models.length && <ActionForm action={selectCodexModel} className="mt-4 flex flex-wrap items-end gap-3">
@@ -64,7 +64,6 @@ export default async function AiSettingsPage() {
               </>}
               <CodexDeviceLogin initialLogin={codex?.login} />
               <p className="mt-3 text-xs text-slate-500">Falls OpenAI die Anmeldung ablehnt: Device-Code-Anmeldung in den ChatGPT-Sicherheitseinstellungen oder Workspace-Berechtigungen aktivieren.</p>
-            </>}
           </>}
         </Card>
         <Card title="Zentrale ChatGPT-Verbindung">
