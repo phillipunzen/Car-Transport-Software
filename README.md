@@ -154,6 +154,7 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 | `AUTH_GOOGLE_ID/SECRET` | Google-Login (optional) |
 | `AUTH_APPLE_ID/SECRET` | Apple-Login (optional) |
 | `ANTHROPIC_API_KEY` | Schaltet die Erkennung von lokaler OCR auf KI um (optional) |
+| `CHATGPT_TOKEN_SECRET` | Optionaler Schlüssel für verschlüsselte ChatGPT-Verbindungen (mind. 32 Zeichen); sonst wird `AUTH_SECRET` verwendet |
 | `OCR_ENABLED` | Lokale OCR an/aus (Standard: an) |
 | `GEO_ENABLED`, `GEOCODER_URL`, `ROUTING_URL`, `ORS_API_KEY` | Standort- und Streckenberechnung (siehe unten) |
 | `STORAGE_DRIVER` | `local` oder `s3` |
@@ -167,7 +168,7 @@ Im Apple-Developer-Konto eine *Services ID* anlegen, „Sign in with Apple“ ak
 
 ### Automatische Erkennung & Datenschutz
 
-Die Anwendung wählt die Erkennungsmethode automatisch:
+Die Anwendung wählt die Erkennungsmethode automatisch: Eine aktive persönliche ChatGPT-Verbindung hat Vorrang; ansonsten gilt die Server-Konfiguration:
 
 | | **Ohne** `ANTHROPIC_API_KEY` – lokale OCR | **Mit** `ANTHROPIC_API_KEY` – KI |
 | --- | --- | --- |
@@ -181,6 +182,21 @@ Die Anwendung wählt die Erkennungsmethode automatisch:
 | Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
 
 Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen scharf und formatfüllend fotografieren. Schatten und leichte Schräglage gleicht die Aufbereitung aus; stark verwackelte Fotos bleiben schwierig. Beim Fahrzeugschein wird der feste Aufbau der Zulassungsbescheinigung Teil I ausgewertet (Felder A, B, D.1, D.3, E), die Plausibilität der FIN geprüft (Herstellerkennung, Prüfziffer) – unsichere Werte bleiben lieber leer als falsch. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
+
+### Persönliches ChatGPT-Abo für die Erkennung
+
+Unter **Einstellungen → KI & ChatGPT** kann jeder Benutzer sein berechtigtes ChatGPT-Konto verbinden. Fahrzeugfotos und Belege (Bilder/PDFs) werden dann über die öffentliche Responses API mit dem persönlichen Abo verarbeitet. Es gelten die Abo-Limits und gegebenenfalls vom Benutzer freigegebene Guthaben. Die Verbindung gewährt keinen Zugriff auf vorhandene ChatGPT-Unterhaltungen und ersetzt nicht die Anmeldung an dieser Software.
+
+Die Integration folgt [Sign in with ChatGPT](https://developers.openai.com/siwc/quickstart) und dem [dokumentierten Verfahren für selbst gehostete VMs](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms). OpenAI bietet die allgemeine Abo-Anbindung für Open-Source-/lokale Anwendungen und ausgewählte private Apps an; für ein kommerzielles, fremdgehostetes Angebot ist eine Freigabe durch OpenAI erforderlich. Ein vorhandenes Codex-Login oder eine Codex-`auth.json` ist keine Verbindungsdatei für diesen Weg.
+
+1. Den Server wie üblich über HTTPS betreiben. `AUTH_SECRET` oder `CHATGPT_TOKEN_SECRET` muss mindestens 32 Zeichen lang sein und auf allen App-Instanzen gleich bleiben. Migrationen werden beim Containerstart ausgeführt.
+2. Unter **Continue with ChatGPT** das eigenständige Anmeldeprogramm herunterladen. Auf dem eigenen Rechner (Node.js 20+) im Download-Ordner `node chatgpt-login.mjs` ausführen. Es öffnet einen lokalen Callback auf `127.0.0.1` und startet den Browser. In ChatGPT anmelden und die Verwendung des Abos erlauben.
+3. Die erzeugte Datei `chatgpt-connection.json` unmittelbar unter Einstellungen → KI importieren und anschließend lokal löschen. Sie enthält geheime Zugangsdaten und darf nicht weitergegeben werden. Git und Docker ignorieren diesen Dateinamen. Der Server überprüft die signierte OpenAI-Identität und speichert die Token mit AES-256-GCM verschlüsselt und an den jeweiligen Benutzer gebunden.
+4. Das Modell aus dem Kontokatalog auswählen. Mehrere Kontoverbindungen können gespeichert und einzeln aktiviert werden. Für ein neues Konto `node chatgpt-login.mjs --new-account` ausführen. Erneute Anmeldungen verwenden die gespeicherte Client-ID; die Einstellungen zeigen den passenden Befehl an.
+
+Der Server erneuert Token automatisch und sperrt die jeweilige Datenbankzeile während der Erneuerung, damit parallele Container keine rotierenden Refresh-Token verbrauchen. Seine Host-ID bleibt in der Datenbank erhalten; die Host-ID des Rechners wird beim Import nicht übernommen. Lokale Registrierungsmetadaten (ohne Token) liegen unter `~/.config/car-transport-software/chatgpt-registration.json`.
+
+Bei Limits, abgebrochenen Antworten oder einer ungültigen Verbindung gibt es **keinen automatischen Wechsel zur kostenpflichtigen Claude-API**. Fahrzeugdaten bleiben manuell editierbar; Belege werden trotzdem gespeichert und zeigen eine Meldung zur fehlgeschlagenen Erkennung. [Nutzung verwalten](https://chatgpt.com/settings/usage) führt zu den Abo-/App-Limits. **Verbindung trennen** widerruft die Sitzung bei OpenAI und entfernt die lokalen Token; ein nicht bestätigter Widerruf wird angezeigt. Danach gilt wieder die Server-Konfiguration. Bei einem Wechsel des Verschlüsselungsschlüssels müssen die Verbindungen erneut hergestellt werden.
 
 ### Standort & Streckenberechnung
 

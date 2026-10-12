@@ -15,7 +15,7 @@ export function VehicleScan({
   onFiles,
 }: {
   orderId?: string;
-  mode: "ai" | "ocr";
+  mode: "ai" | "chatgpt" | "ocr";
   onResult: (data: NonNullable<VehicleScanResult["data"]>) => void;
   onFiles?: (files: File[]) => void;
 }) {
@@ -59,7 +59,7 @@ export function VehicleScan({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-700">
           <span className="font-semibold">Automatisch erkennen:</span>{" "}
-          {mode === "ai"
+          {mode !== "ocr"
             ? "Fahrzeugschein, Fahrzeug/Kennzeichen oder FIN fotografieren bzw. hochladen."
             : "Fahrzeugschein, Kennzeichen oder FIN formatfüllend fotografieren bzw. hochladen."}
         </p>
@@ -72,6 +72,7 @@ export function VehicleScan({
           </button>
         </div>
       </div>
+      {mode === "chatgpt" && <p className="mt-2 text-xs text-slate-600">Dein ChatGPT-Abo wird verwendet. <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer" className="underline">Nutzung verwalten</a></p>}
       <input ref={camera} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => handle(e.target.files)} />
       <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {message && <p className={`mt-2 text-sm ${message.error ? "text-red-600" : "text-emerald-700"}`}>{message.text}</p>}

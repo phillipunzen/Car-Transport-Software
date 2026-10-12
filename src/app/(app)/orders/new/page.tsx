@@ -121,7 +121,7 @@ export default async function NewOrderPage({
         values={values}
         driverPayModule={ctx.org.moduleDriverPay}
         tradePlates={await tradePlateOptions(ctx.org)}
-        recognition={recognitionMode()}
+        recognition={await recognitionMode(ctx.user.id)}
         geo={geoEnabled()}
       />
     </>

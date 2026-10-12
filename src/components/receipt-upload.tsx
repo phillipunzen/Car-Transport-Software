@@ -7,7 +7,7 @@ import { uploadReceipt } from "@/app/(app)/orders/[id]/expenses/actions";
 import { enqueue, isNetworkError } from "@/lib/offline-queue";
 import { PendingUploads } from "@/components/pending-uploads";
 
-export function ReceiptUpload({ orderId, recognition }: { orderId: string; recognition: "ai" | "ocr" | "off" }) {
+export function ReceiptUpload({ orderId, recognition }: { orderId: string; recognition: "ai" | "chatgpt" | "ocr" | "off" }) {
   const auto = recognition !== "off";
   const router = useRouter();
   const camera = useRef<HTMLInputElement>(null);
@@ -21,6 +21,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
     const files = Array.from(list);
     let recognized = 0;
     let queued = 0;
+    let warning: string | undefined;
     try {
       for (let i = 0; i < files.length; i++) {
         setBusy(auto ? `Beleg ${i + 1}/${files.length} wird hochgeladen & ausgelesen…` : `Beleg ${i + 1}/${files.length} wird hochgeladen…`);
@@ -45,6 +46,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
           const res = await uploadReceipt(fd);
           if (res.error) throw new Error(res.error);
           if (res.recognized) recognized++;
+          if (res.warning) warning = res.warning;
         } catch (e) {
           if (!isNetworkError(e)) throw e;
           await toQueue();
@@ -55,7 +57,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
       setMsg(
         queued
           ? { text: `Keine Verbindung – ${queued} Beleg(e) gesichert, Upload & Auslesen folgen automatisch.`, error: false }
-          : {
+          : warning ? { text: `Beleg(e) gespeichert. ${warning} Bitte die Beträge manuell eintragen.`, error: true } : {
               text: auto
                 ? `${recognized} von ${sent} Beleg(en) automatisch erkannt – bitte Werte prüfen.`
                 : `${sent} Beleg(e) hochgeladen – bitte Beträge eintragen.`,
@@ -81,6 +83,7 @@ export function ReceiptUpload({ orderId, recognition }: { orderId: string; recog
           Datei / PDF hochladen
         </button>
       </div>
+      {recognition === "chatgpt" && <p className="text-xs text-slate-600">Dein ChatGPT-Abo wird verwendet. <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer" className="underline">Nutzung verwalten</a></p>}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handle(e.target.files)} />
       <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => handle(e.target.files)} />
       {busy && <p className="text-sm text-brand-700">{busy}</p>}

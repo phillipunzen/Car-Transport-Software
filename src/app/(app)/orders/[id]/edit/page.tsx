@@ -38,7 +38,7 @@ export default async function EditOrderPage({ params, searchParams }: { params: 
         restricted={driver}
         driverPayModule={ctx.org.moduleDriverPay}
         tradePlates={await tradePlateOptions(ctx.org)}
-        recognition={recognitionMode()}
+        recognition={await recognitionMode(ctx.user.id)}
         geo={geoEnabled()}
       />
     </>

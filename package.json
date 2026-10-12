@@ -22,6 +22,7 @@
     "@tesseract.js-data/deu": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "fflate": "^0.8.3",
+    "jose": "^6.2.12",
     "next": "^15.5.26",
     "next-auth": "^5.0.0-beta.32",
     "nodemailer": "^7.0.13",

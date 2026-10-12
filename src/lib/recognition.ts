@@ -1,4 +1,5 @@
 import { aiEnabled, extractReceipt, extractVehicle } from "@/lib/ai";
+import { hasChatgptPlan } from "@/lib/chatgpt";
 import { extractPdfText, ocrEnabled, PREPROCESSING, recognizeText } from "@/lib/ocr";
 import {
   isCompleteRegistration,
@@ -11,12 +12,14 @@ import {
 
 /**
  * Wählt die Erkennungsmethode:
+ * - persönliches ChatGPT-Abo, wenn der aktuelle Benutzer es verbunden hat
  * - KI (Claude), sobald ein ANTHROPIC_API_KEY hinterlegt ist
  * - sonst lokale Texterkennung (OCR) auf dem eigenen Server
  */
-export type RecognitionMode = "ai" | "ocr" | "off";
+export type RecognitionMode = "ai" | "chatgpt" | "ocr" | "off";
 
-export function recognitionMode(): RecognitionMode {
+export async function recognitionMode(userId: string): Promise<RecognitionMode> {
+  if (await hasChatgptPlan(userId)) return "chatgpt";
   if (aiEnabled()) return "ai";
   if (ocrEnabled()) return "ocr";
   return "off";
@@ -70,16 +73,16 @@ async function ocrReceipt(file: Input): Promise<ReceiptGuess> {
   return best!;
 }
 
-export async function recognizeVehicle(files: Input[]): Promise<VehicleGuess> {
-  const mode = recognitionMode();
-  if (mode === "ai") return extractVehicle(files);
+export async function recognizeVehicle(files: Input[], userId: string): Promise<VehicleGuess> {
+  const mode = await recognitionMode(userId);
+  if (mode === "ai" || mode === "chatgpt") return extractVehicle(files, mode === "chatgpt" ? userId : undefined);
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrVehicle(files);
 }
 
-export async function recognizeReceipt(file: Input): Promise<ReceiptGuess> {
-  const mode = recognitionMode();
-  if (mode === "ai") return extractReceipt(file);
+export async function recognizeReceipt(file: Input, userId: string): Promise<ReceiptGuess> {
+  const mode = await recognitionMode(userId);
+  if (mode === "ai" || mode === "chatgpt") return extractReceipt(file, mode === "chatgpt" ? userId : undefined);
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrReceipt(file);
 }

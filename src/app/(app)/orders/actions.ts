@@ -203,7 +203,8 @@ export type VehicleScanResult = {
 /** Liest Kennzeichen, Marke, Modell, FIN usw. aus Fotos aus (KI oder lokale OCR). */
 export async function scanVehicle(formData: FormData): Promise<VehicleScanResult> {
   const ctx = await requireCtx();
-  if (recognitionMode() === "off") return { error: "Die automatische Erkennung ist deaktiviert." };
+  const mode = await recognitionMode(ctx.user.id);
+  if (mode === "off") return { error: "Die automatische Erkennung ist deaktiviert." };
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0).slice(0, 5);
   if (files.length === 0) return { error: "Bitte mindestens ein Foto auswählen." };
   const orderId = str(formData.get("orderId"));
@@ -220,10 +221,11 @@ export async function scanVehicle(formData: FormData): Promise<VehicleScanResult
         inputs.push({ data: Buffer.from(await file.arrayBuffer()), mimeType: file.type });
       }
     }
-    const data = await recognizeVehicle(inputs);
+    const data = await recognizeVehicle(inputs, ctx.user.id);
     if (orderId) revalidatePath(`/orders/${orderId}`);
     return { data };
   } catch (e) {
+    if (mode === "chatgpt") return { error: e instanceof Error ? e.message : "Die ChatGPT-Erkennung ist fehlgeschlagen." };
     console.error("Fahrzeugerkennung fehlgeschlagen", e);
     return { error: "Die Erkennung ist fehlgeschlagen. Bitte Daten manuell eintragen." };
   }

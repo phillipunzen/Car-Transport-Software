@@ -36,6 +36,31 @@ model User {
   ordersAssigned     Order[]      @relation("OrderAssignedTo")
   filesUploaded      File[]
   protocolsPerformed Protocol[]
+  chatgptProfiles     ChatgptProfile[]
+}
+
+// ChatGPT plan connections belong to the individual user, never to a tenant.
+model ChatgptProfile {
+  id          String   @id @default(cuid())
+  userId      String
+  clientId    String
+  subject     String
+  email       String
+  credentials String?  @db.MediumText // AES-256-GCM encrypted token set
+  model       String?
+  active      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId, active])
+}
+
+model ChatgptHost {
+  id     String @id
+  hostId String
 }
 
 model Account {

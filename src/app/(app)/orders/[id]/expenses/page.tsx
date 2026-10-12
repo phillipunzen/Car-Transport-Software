@@ -93,7 +93,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ id: s
       )}
       {!lock.locked && (
       <Card title="Beleg erfassen">
-        <ReceiptUpload orderId={order.id} recognition={recognitionMode()} />
+        <ReceiptUpload orderId={order.id} recognition={await recognitionMode(ctx.user.id)} />
         <details className="mt-4">
           <summary className="cursor-pointer text-sm font-medium text-slate-600">Ausgabe ohne Beleg erfassen (z. B. Verpflegungspauschale)</summary>
           <form action={addExpense} className="mt-3 grid gap-3 sm:grid-cols-5">

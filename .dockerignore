@@ -9,3 +9,4 @@ Dockerfile
 docker-compose*.yml
 *.md
 tests
+chatgpt-connection*.json
