@@ -65,7 +65,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-3">
           <Card title="Stammdaten">
-            <VehicleForm action={updateVehicle} vehicle={vehicle} customers={customers} recognition={await recognitionMode()} />
+            <VehicleForm action={updateVehicle} vehicle={vehicle} customers={customers} recognition={recognitionMode()} />
           </Card>
           <form action={deleteVehicle}>
             <input type="hidden" name="id" value={vehicle.id} />

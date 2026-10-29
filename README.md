@@ -111,6 +111,8 @@ Webanwendung (Desktop, Smartphone, iPad) zum Planen, Dokumentieren und Abrechnen
 - Jede Registrierung erhält eine eigene **Instanz** (Firma); weitere Personen können per Einladungslink/E-Mail eingeladen werden
 - Rollen: Inhaber, Administrator, Mitarbeiter (Büro) und **Fahrer** – Fahrer sehen nur ihre eigenen Touren, ohne Preise, Kunden, Angebote und Rechnungen; Wechsel zwischen mehreren Instanzen
 - **Zwei-Faktor-Anmeldung** (Authenticator-App, TOTP) mit Wiederherstellungscodes; optional für Inhaber/Administratoren vorgeschrieben
+- **Schutz gegen Durchprobieren:** nach 10 Fehlversuchen (Passwort oder Code) wird die Anmeldung 15 Minuten gesperrt, jeder weitere Fehlversuch verdoppelt die Sperre (max. 1 Stunde); gespeichert in der Datenbank, gilt also für alle App-Instanzen
+- **E-Mail-Bestätigung** bei Registrierung mit Passwort (Link per E-Mail, erneut anfordern unter `/verify-email`)
 - Als App installierbar (PWA) auf iPhone/iPad/Android
 
 ## Technik
@@ -154,8 +156,6 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 | `AUTH_GOOGLE_ID/SECRET` | Google-Login (optional) |
 | `AUTH_APPLE_ID/SECRET` | Apple-Login (optional) |
 | `ANTHROPIC_API_KEY` | Schaltet die Erkennung von lokaler OCR auf KI um (optional) |
-| `CHATGPT_APP_ADMIN_EMAILS` | App-Administratoren für die zentrale ChatGPT-Verbindung (kommasepariert); leer: erstes Benutzerkonto |
-| `CHATGPT_TOKEN_SECRET` | Optionaler Schlüssel für verschlüsselte ChatGPT-Verbindungen (mind. 32 Zeichen); sonst wird `AUTH_SECRET` verwendet |
 | `OCR_ENABLED` | Lokale OCR an/aus (Standard: an) |
 | `GEO_ENABLED`, `GEOCODER_URL`, `ROUTING_URL`, `ORS_API_KEY` | Standort- und Streckenberechnung (siehe unten) |
 | `STORAGE_DRIVER` | `local` oder `s3` |
@@ -164,12 +164,14 @@ Alle Variablen sind in [`.env.example`](.env.example) beschrieben. Die wichtigst
 ### Google-Login einrichten
 In der [Google Cloud Console](https://console.cloud.google.com/apis/credentials) eine OAuth-Client-ID (Webanwendung) anlegen. Autorisierte Weiterleitungs-URI: `https://<deine-domain>/api/auth/callback/google`.
 
+**Verknüpfen mit bestehenden Konten:** Google/Apple-Anmeldungen werden nur dann mit einem vorhandenen Passwort-Konto derselben E-Mail-Adresse verknüpft, wenn dessen Adresse bestätigt ist – per Bestätigungslink, per angenommener Einladung an genau diese Adresse oder durch eine frühere Google/Apple-Anmeldung. Ohne SMTP kann ein Passwort-Konto nur über eine Einladung bestätigt werden; Google/Apple-Logins für neue Konten funktionieren unabhängig davon.
+
 ### Apple-Login einrichten
 Im Apple-Developer-Konto eine *Services ID* anlegen, „Sign in with Apple“ aktivieren und als Return-URL `https://<deine-domain>/api/auth/callback/apple` eintragen. `AUTH_APPLE_ID` ist die Services ID, `AUTH_APPLE_SECRET` das daraus generierte Client-Secret (JWT, max. 6 Monate gültig – siehe [Auth.js-Doku](https://authjs.dev/getting-started/providers/apple)). Apple erfordert HTTPS.
 
 ### Automatische Erkennung & Datenschutz
 
-Die Anwendung wählt die Erkennungsmethode automatisch: Die aktive zentrale ChatGPT-Verbindung gilt für alle Benutzer und Mandanten und hat Vorrang; ansonsten gilt die Server-Konfiguration:
+Die Anwendung wählt die Erkennungsmethode automatisch anhand der Server-Konfiguration. Welche Methode aktiv ist, zeigt **Einstellungen → KI-Erkennung**:
 
 | | **Ohne** `ANTHROPIC_API_KEY` – lokale OCR | **Mit** `ANTHROPIC_API_KEY` – KI |
 | --- | --- | --- |
@@ -183,41 +185,6 @@ Die Anwendung wählt die Erkennungsmethode automatisch: Die aktive zentrale Chat
 | Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
 
 Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen scharf und formatfüllend fotografieren. Schatten und leichte Schräglage gleicht die Aufbereitung aus; stark verwackelte Fotos bleiben schwierig. Beim Fahrzeugschein wird der feste Aufbau der Zulassungsbescheinigung Teil I ausgewertet (Felder A, B, D.1, D.3, E), die Plausibilität der FIN geprüft (Herstellerkennung, Prüfziffer) – unsichere Werte bleiben lieber leer als falsch. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
-
-### Codex per Device Code für die ganze App
-
-Unter **Einstellungen → KI, Codex & ChatGPT** kann ein App-Administrator **Codex per Device Code verbinden** wählen. OpenAI zeigt eine Anmeldeseite; den in der App angezeigten Einmalcode dort bestätigen. Die App erkennt den erfolgreichen Abschluss automatisch und aktiviert ein Bildmodell aus dem Codex-Katalog. Es sind weder ein lokales Anmeldeprogramm noch ein JSON-Import nötig. Alle Benutzer und Mandanten verwenden anschließend die zentrale Codex-Sitzung. Die App-Anmeldung und die bestehenden Zugriffsrechte bleiben getrennt davon.
-
-Die Integration verwendet den dokumentierten [Codex App Server](https://learn.chatgpt.com/docs/app-server) über einen privaten stdio-Prozess und dessen `account/login/start` mit `chatgptDeviceCode`. Bei Bedarf muss Device-Code-Anmeldung in den [ChatGPT-Sicherheitseinstellungen bzw. Workspace-Berechtigungen](https://learn.chatgpt.com/docs/auth) aktiviert werden. Codex verwaltet Anmeldung und Token-Erneuerung selbst. Das Kontingent gehört zum angemeldeten Codex-/ChatGPT-Konto; eine unbegrenzte oder allgemein freigegebene Mehrbenutzer-Nutzung eines persönlichen Abos ist dadurch nicht zugesichert. OpenAI bezeichnet Device Code als Beta und App Server als experimentell, ohne Unterstützung für Produktions-Workloads.
-
-**Docker Compose:** Nach dem Update startet `docker compose up -d` zusätzlich den internen Dienst `codex` aus demselben App-Image. `AUTH_SECRET` muss gesetzt sein und mindestens 32 Zeichen enthalten. Der App-Dienst verwendet `CODEX_BRIDGE_URL=http://codex:3100`; `CODEX_BRIDGE_SECRET` kann als eigener Schlüssel gesetzt werden, ansonsten verwenden beide Dienste `AUTH_SECRET`. Für eine Installation ohne Compose den privaten Dienst mit `node /app/scripts/codex-bridge.mjs` starten, `CODEX_BRIDGE_SECRET` und `CODEX_APP_HOME` setzen und die App mit derselben Dienstadresse und demselben Schlüssel konfigurieren. Den Dienstport nicht öffentlich veröffentlichen.
-
-**Anmeldebutton fehlt nach einem Update:** Ein Image-Update aktualisiert nicht die Compose-Datei auf dem Server. Im Repository-Verzeichnis zuerst `git pull --ff-only`, anschließend `docker compose pull` und `docker compose up -d` ausführen. Die aktuelle Compose-Datei startet `codex` als notwendige Abhängigkeit der App und setzt für beide Dienste denselben Schlüssel. Eine nicht gesetzte `CODEX_BRIDGE_URL` verwendet automatisch `http://codex:3100`. App-Administratoren sehen den Anmeldebutton auch bei fehlender Konfiguration; Fehler werden angezeigt, statt die Anmeldung auszublenden. Mit `docker compose ps app codex` lässt sich prüfen, ob beide Dienste laufen.
-
-Die Sitzung liegt im geschützten Volume `codex-session` unter `/data/codex` (Verzeichnisrechte 0700). Das Volume enthält geheime Codex-Zugangsdaten: wie ein Passwort behandeln, nicht ins Repository aufnehmen. Der Codex-Dienst erhält weder App-Datenbankzugang noch App-Uploads oder API-Schlüssel. Die Bridge ist authentifiziert und bietet ausschließlich Anmeldung, Status, Abmeldung und Dokumentauswertung an; beliebige Codex-RPCs werden nicht weitergereicht. Ein einzelner Dienst bedient auch mehrere App-Replikate und serialisiert Anfragen, damit Token-Erneuerungen nicht konkurrieren.
-
-Für jede Auswertung beginnt ein neuer, nicht persistierter Thread ohne fremde Dokumente oder Gesprächsverlauf. Shell, Apps, Subagenten, Hooks, Websuche und Bildwerkzeuge sind abgeschaltet; Werkzeugfreigaben werden verweigert. Bilder werden ausgerichtet und auf maximal 2048 Pixel normalisiert; PDFs werden lokal mit Poppler vollständig gerendert (höchstens 8 Seiten pro PDF, insgesamt 12 Bilder/Seiten). Temporäre Dateien werden danach gelöscht. JSON-Ergebnisse werden erst nach erfolgreichem Turn-Abschluss angenommen und anschließend gegen das Daten-Schema validiert.
-
-Ein ausgewählter Codex-Zugang bleibt bei Fehlern oder Limits ausgewählt: **kein automatischer Wechsel auf eine kostenpflichtige API**. Werte können manuell eingetragen werden. **Codex abmelden** beendet die lokale Sitzung und stellt die übrige zentrale Erkennungskonfiguration wieder her. Die vorhandene ChatGPT-Responses-Verbindung kann alternativ gewählt werden; sie nutzt einen anderen OAuth-Anmeldeweg.
-
-### Zentrale ChatGPT-Verbindung für die ganze App
-
-Unter **Einstellungen → KI & ChatGPT** richtet ein App-Administrator eine gemeinsame Verbindung ein. Alle angemeldeten Benutzer in allen Mandanten verwenden dieselbe ausgewählte Verbindung und dasselbe Modell für Fahrzeugfotos, Kfz-Scheine und Belege (Bilder/PDFs). Die Verarbeitung erfolgt über die öffentliche Responses API; alle Anfragen verbrauchen das Kontingent und gegebenenfalls das freigegebene Guthaben des verbundenen Kontos. Die bestehenden Zugriffsrechte auf Aufträge und Dateien bleiben wirksam. Jede Anfrage enthält nur ihre ausgewählten Dokumente, ohne gemeinsamen Gesprächsverlauf (`store: false`).
-
-**App-Administratoren** werden über `CHATGPT_APP_ADMIN_EMAILS` auf dem Server festgelegt (kommagetrennte E-Mail-Adressen). Ohne diese Einstellung darf ausschließlich das zuerst registrierte Benutzerkonto die zentrale Verbindung verwalten. Tenant-Inhaber und Tenant-Administratoren haben dadurch keine App-Adminrechte. Normale Benutzer sehen nur den KI-Status und das Modell; Kontoidentität, Import, Modellauswahl und Trennen der Verbindung sind App-Administratoren vorbehalten.
-
-Die Anbindung folgt [Sign in with ChatGPT](https://developers.openai.com/siwc/quickstart) und dem [Verfahren für selbst gehostete VMs](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms). OpenAI beschreibt die Abo-Berechtigung pro ChatGPT-Konto und Workspace; die Dokumentation bestätigt keine allgemeine Freigabe eines persönlichen Plus-/Pro-Abos als Mehrbenutzer-Zugang. Die zentrale technische Konfiguration ersetzt diese Berechtigung nicht. Verfügbarkeit, Limits und die Zulässigkeit des jeweiligen Kontos für diesen Einsatz müssen mit OpenAI geklärt werden. Für kommerzielle/fremdgehostete Anwendungen verweist OpenAI auf sein Zugangsverfahren. Eine Codex-`auth.json` ist keine Verbindungsdatei für diese Integration.
-
-1. Den Server über HTTPS betreiben. `AUTH_SECRET` oder `CHATGPT_TOKEN_SECRET` muss mindestens 32 Zeichen lang sein und auf allen App-Instanzen gleich bleiben. Optional `CHATGPT_APP_ADMIN_EMAILS` für die vorgesehenen App-Administratoren setzen. Migrationen laufen beim Containerstart.
-2. Als App-Administrator unter **Continue with ChatGPT** das Anmeldeprogramm herunterladen. Auf dem eigenen Rechner (Node.js 20+) im Download-Ordner `node chatgpt-login.mjs` ausführen. Im Browser anmelden und die Abo-Nutzung erlauben.
-3. Die erzeugte Datei `chatgpt-connection.json` sofort in den Einstellungen importieren und die Nutzung für alle Benutzer und Mandanten auswählen. Danach die Datei lokal löschen; sie enthält geheime Zugangsdaten und darf nicht weitergegeben werden. Git und Docker ignorieren den Dateinamen. Der Server überprüft die signierte OpenAI-Identität und speichert die Token mit AES-256-GCM verschlüsselt und an die jeweilige App-Verbindung gebunden.
-4. Ein Modell aus dem Kontokatalog wählen. Mehrere zentrale Verbindungen können gespeichert werden; genau eine ist für die ganze App ausgewählt. Für ein neues Konto `node chatgpt-login.mjs --new-account` ausführen. Die Einstellungen zeigen den passenden Befehl für eine erneute Anmeldung mit einer vorhandenen Client-ID.
-
-**Umstellung von persönlichen Verbindungen:** Die Migration übernimmt keine persönliche Verbindung automatisch. Ein App-Administrator kann seine eigene bisherige Verbindung mit **Für die ganze App übernehmen** zentral aktivieren. Dabei werden die Token neu an die App-Verbindung gebunden und aus dem persönlichen Datensatz entfernt. Alternativ eine neue Verbindungsdatei zentral importieren. Persönliche Verbindungen anderer Benutzer werden nicht geteilt und nicht mehr für die Erkennung verwendet.
-
-Der Server erneuert Token automatisch. Eine gemeinsame Datenbankzeile sperrt Auswahl, Übernahme, Trennen und Erneuerung über alle Container hinweg, damit parallele Benutzeranfragen rotierende Refresh-Token nur einmal erneuern. Die zentrale Verbindung bleibt unabhängig vom Löschen eines Benutzer- oder Tenant-Kontos bestehen. Die Host-ID des Servers bleibt in der Datenbank erhalten; die Host-ID des Rechners wird beim Import nicht übernommen. Lokale Registrierungsmetadaten (ohne Token) liegen unter `~/.config/car-transport-software/chatgpt-registration.json`.
-
-Bei Limits, abgebrochenen Antworten oder ungültiger zentraler Verbindung gibt es **keinen automatischen Wechsel zur kostenpflichtigen Claude-API**. Fahrzeugdaten bleiben manuell editierbar; Belege werden trotzdem gespeichert. Benutzer erhalten eine Meldung, die sie an den App-Administrator verweist. **Nutzung verwalten** öffnet für den App-Administrator die [ChatGPT-Einstellungen](https://chatgpt.com/settings/usage). **Verbindung trennen** widerruft die Sitzung bei OpenAI und entfernt die lokalen Token; ein nicht bestätigter Widerruf wird angezeigt. Wenn keine zentrale Verbindung ausgewählt ist, gilt die Server-Konfiguration (Claude oder lokale OCR). Bei einem Wechsel des Verschlüsselungsschlüssels müssen die Verbindungen erneut hergestellt werden.
 
 ### Standort & Streckenberechnung
 

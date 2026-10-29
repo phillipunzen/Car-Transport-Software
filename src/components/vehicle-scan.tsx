@@ -15,7 +15,7 @@ export function VehicleScan({
   onFiles,
 }: {
   orderId?: string;
-  mode: "ai" | "chatgpt" | "codex" | "ocr";
+  mode: "ai" | "ocr";
   onResult: (data: NonNullable<VehicleScanResult["data"]>) => void;
   onFiles?: (files: File[]) => void;
 }) {

@@ -1,6 +1,4 @@
 import { aiEnabled, extractReceipt, extractVehicle } from "@/lib/ai";
-import { hasChatgptPlan } from "@/lib/chatgpt";
-import { db } from "@/lib/db";
 import { extractPdfText, ocrEnabled, PREPROCESSING, recognizeText } from "@/lib/ocr";
 import {
   isCompleteRegistration,
@@ -13,16 +11,12 @@ import {
 
 /**
  * Wählt die Erkennungsmethode:
- * - zentrale ChatGPT-Verbindung für alle Benutzer und Mandanten
  * - KI (Claude), sobald ein ANTHROPIC_API_KEY hinterlegt ist
  * - sonst lokale Texterkennung (OCR) auf dem eigenen Server
  */
-export type RecognitionMode = "ai" | "chatgpt" | "codex" | "ocr" | "off";
+export type RecognitionMode = "ai" | "ocr" | "off";
 
-export async function recognitionMode(): Promise<RecognitionMode> {
-  const host = await db.chatgptHost.findUnique({ where: { id: "runtime" }, select: { aiProvider: true } });
-  if (host?.aiProvider === "codex") return "codex";
-  if (await hasChatgptPlan()) return "chatgpt";
+export function recognitionMode(): RecognitionMode {
   if (aiEnabled()) return "ai";
   if (ocrEnabled()) return "ocr";
   return "off";
@@ -77,17 +71,15 @@ async function ocrReceipt(file: Input): Promise<ReceiptGuess> {
 }
 
 export async function recognizeVehicle(files: Input[]): Promise<VehicleGuess> {
-  const mode = await recognitionMode();
-  if (mode === "codex") return extractVehicle(files, "codex");
-  if (mode === "ai" || mode === "chatgpt") return extractVehicle(files, mode === "chatgpt");
+  const mode = recognitionMode();
+  if (mode === "ai") return extractVehicle(files);
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrVehicle(files);
 }
 
 export async function recognizeReceipt(file: Input): Promise<ReceiptGuess> {
-  const mode = await recognitionMode();
-  if (mode === "codex") return extractReceipt(file, "codex");
-  if (mode === "ai" || mode === "chatgpt") return extractReceipt(file, mode === "chatgpt");
+  const mode = recognitionMode();
+  if (mode === "ai") return extractReceipt(file);
   if (mode === "off") throw new Error("Erkennung deaktiviert");
   return ocrReceipt(file);
 }

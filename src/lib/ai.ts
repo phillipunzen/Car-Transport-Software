@@ -1,16 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { extractWithChatgpt } from "@/lib/chatgpt";
-import { extractWithCodex } from "@/lib/codex";
 
-/**
- * KI-Erkennung für Fahrzeugdaten und Belege: zentrale ChatGPT-Verbindung,
- * wenn ausgewählt, sonst die konfigurierte Claude-API.
- */
+/** KI-Erkennung für Fahrzeugdaten und Belege über die Claude-API. */
 export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+export const aiModel = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
 let client: Anthropic | undefined;
 const anthropic = () => (client ??= new Anthropic());
@@ -26,11 +21,9 @@ function toContent(file: Input): Anthropic.Beta.BetaContentBlockParam {
   return { type: "image", source: { type: "base64", media_type: mediaType, data } };
 }
 
-async function extract<S extends z.ZodType>(files: Input[], instruction: string, schema: S, useChatgpt: boolean | "codex" = false): Promise<z.infer<S>> {
-  if (useChatgpt === "codex") return extractWithCodex(files, instruction, schema);
-  if (useChatgpt) return extractWithChatgpt(files, instruction, schema);
+async function extract<S extends z.ZodType>(files: Input[], instruction: string, schema: S): Promise<z.infer<S>> {
   const response = await anthropic().beta.messages.parse({
-    model: MODEL,
+    model: aiModel,
     max_tokens: 4000,
     output_config: { effort: "low", format: betaZodOutputFormat(schema) },
     betas: ["server-side-fallback-2026-07-01"],
@@ -53,7 +46,7 @@ export const VehicleSchema = z.object({
   notes: z.string().nullable().describe("Kurzer Hinweis, falls etwas unsicher oder unleserlich war"),
 });
 
-export async function extractVehicle(files: Input[], useChatgpt: boolean | "codex" = false) {
+export async function extractVehicle(files: Input[]) {
   const result = await extract(
     files,
     `Du bekommst ein oder mehrere Fotos eines Fahrzeugs, des Kennzeichens, der Fahrgestellnummer (FIN/VIN),
@@ -63,7 +56,6 @@ oder aus dem Erscheinungsbild sicher ableiten kannst (Marke/Modell anhand von Em
 Kennzeichen im deutschen Format mit Bindestrich und Leerzeichen, FIN ohne Leerzeichen in Großbuchstaben.
 Unbekannte Werte sind null.`,
     VehicleSchema,
-    useChatgpt,
   );
   if (result.vin) result.vin = result.vin.replace(/[\s-]/g, "").toUpperCase();
   return result;
@@ -95,7 +87,7 @@ export const ReceiptSchema = z.object({
   description: z.string().nullable().describe("Kurzbeschreibung, z.B. 'ICE Hamburg – München'"),
 });
 
-export async function extractReceipt(file: Input, useChatgpt: boolean | "codex" = false) {
+export async function extractReceipt(file: Input) {
   return extract(
     [file],
     `Das ist ein Beleg (Quittung, Rechnung, Fahrkarte, Hotelrechnung o.ä.), der bei einer Fahrzeugüberführung angefallen ist.
@@ -105,6 +97,5 @@ HOTEL, FUEL=Tanken, CHARGING=Laden E-Auto, TOLL=Maut/Vignette, PARKING, MEAL=Bew
 PER_DIEM=Verpflegungspauschale, OTHER). Wenn mehrere Steuersätze vorkommen, nimm den für den größten Betrag.
 Unbekannte Werte sind null.`,
     ReceiptSchema,
-    useChatgpt,
   );
 }

@@ -28,7 +28,7 @@ function defaultRebillable(order: { returnType: string }, category: string) {
 }
 
 /** Beleg hochladen und automatisch auslesen (KI oder lokale OCR). */
-export async function uploadReceipt(formData: FormData): Promise<{ error?: string; recognized?: boolean; warning?: string }> {
+export async function uploadReceipt(formData: FormData): Promise<{ error?: string; recognized?: boolean }> {
   let found;
   try {
     found = await orderFor(String(formData.get("orderId")));
@@ -47,16 +47,14 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
   }
 
   let extracted: Awaited<ReturnType<typeof recognizeReceipt>> | null = null;
-  let warning: string | undefined;
-  const mode = await recognitionMode();
+  const mode = recognitionMode();
   if (mode !== "off") {
     try {
       const result = await recognizeReceipt({ data: saved.data, mimeType: saved.record.mimeType });
       // Nur als "erkannt" werten, wenn tatsächlich etwas gefunden wurde
       if (result.amountGross !== null || result.vendor || result.date) extracted = result;
     } catch (e) {
-      if (mode === "chatgpt") warning = e instanceof Error ? e.message : "Die ChatGPT-Erkennung ist fehlgeschlagen.";
-      else console.error("Belegerkennung fehlgeschlagen", e);
+      console.error("Belegerkennung fehlgeschlagen", e);
     }
   }
   const date = extracted?.date ? new Date(`${extracted.date}T12:00:00Z`) : null;
@@ -79,7 +77,7 @@ export async function uploadReceipt(formData: FormData): Promise<{ error?: strin
   });
   await logEvent(order.id, ctx, `Beleg hinzugefügt${extracted?.vendor ? `: ${extracted.vendor}` : ""}`);
   revalidatePath(`/orders/${order.id}`, "layout");
-  return { recognized: Boolean(extracted), warning };
+  return { recognized: Boolean(extracted) };
 }
 
 export async function addExpense(formData: FormData) {

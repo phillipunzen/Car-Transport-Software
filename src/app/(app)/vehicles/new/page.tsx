@@ -15,7 +15,7 @@ export default async function NewVehiclePage() {
     <>
       <PageHeader title="Neues Fahrzeug" back={{ href: "/vehicles", label: "Fahrzeuge" }} />
       <Card>
-        <VehicleForm action={createVehicle} customers={customers} recognition={await recognitionMode()} />
+        <VehicleForm action={createVehicle} customers={customers} recognition={recognitionMode()} />
       </Card>
     </>
   );

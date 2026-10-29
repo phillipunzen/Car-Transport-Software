@@ -6,4 +6,3 @@ out/
 data/
 *.tsbuildinfo
 next-env.d.ts
-chatgpt-connection*.json

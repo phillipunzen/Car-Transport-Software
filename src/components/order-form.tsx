@@ -64,7 +64,7 @@ export function OrderForm({
   members: { id: string; name: string }[];
   vehicles: VehicleOption[];
   orderId?: string;
-  recognition: "ai" | "chatgpt" | "codex" | "ocr" | "off";
+  recognition: "ai" | "ocr" | "off";
   geo: boolean;
   /** "quote": vereinfachtes Formular für Angebote (Eckdaten + Preis) */
   mode?: "order" | "quote";

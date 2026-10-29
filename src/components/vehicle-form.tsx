@@ -28,7 +28,7 @@ export function VehicleForm({
   action: (s: FormState, f: FormData) => Promise<FormState>;
   vehicle?: Vehicle;
   customers: { id: string; name: string }[];
-  recognition: "ai" | "chatgpt" | "codex" | "ocr" | "off";
+  recognition: "ai" | "ocr" | "off";
 }) {
   const [v, setV] = useState<Record<Key, string>>(() => Object.fromEntries(FIELDS.map(([k]) => [k, vehicle?.[k] ?? ""])) as Record<Key, string>);
   // Dokumente (z. B. Fahrzeugschein), die mit dem Formular gespeichert werden
