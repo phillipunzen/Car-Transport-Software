@@ -25,6 +25,8 @@ model User {
   totpSecret    String? // Zwei-Faktor-Anmeldung (TOTP), Base32
   totpEnabled   Boolean   @default(false)
   recoveryCodes Json? // gehashte Wiederherstellungscodes
+  failedLogins  Int       @default(0) // aufeinanderfolgende Fehlversuche (Passwort/Code)
+  lockedUntil   DateTime? // Anmeldung gesperrt bis
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

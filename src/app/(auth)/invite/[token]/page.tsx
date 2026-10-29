@@ -15,7 +15,11 @@ async function accept(formData: FormData) {
   if (!session?.user?.id) redirect("/login");
   const invitation = await db.invitation.findUnique({ where: { token: String(formData.get("token")) } });
   if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) redirect("/dashboard");
+  const user = await db.user.findUnique({ where: { id: session.user.id }, select: { email: true } });
+  // Der Einladungslink ging an genau diese Adresse – das gilt als Bestätigung
+  const sameEmail = user?.email.toLowerCase() === invitation.email.toLowerCase();
   await db.$transaction([
+    ...(sameEmail ? [db.user.updateMany({ where: { id: session.user.id, emailVerified: null }, data: { emailVerified: new Date() } })] : []),
     db.membership.upsert({
       where: { userId_organizationId: { userId: session.user.id, organizationId: invitation.organizationId } },
       create: { userId: session.user.id, organizationId: invitation.organizationId, role: invitation.role },

@@ -3,9 +3,11 @@
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { z } from "zod";
-import { signIn } from "@/auth";
+import { auth, signIn } from "@/auth";
 import { db } from "@/lib/db";
 import { createOrganizationForUser } from "@/lib/org";
+import { checkPassword, isLocked, lockedMessage } from "@/lib/login-guard";
+import { sendVerificationMail } from "@/lib/email-verification";
 import type { FormState } from "@/components/action-form";
 
 const safeCallback = (v: FormDataEntryValue | null) => {
@@ -15,32 +17,27 @@ const safeCallback = (v: FormDataEntryValue | null) => {
 
 export type LoginState = { error?: string; needsCode?: boolean } | undefined;
 
-// Einfache Bremse gegen Durchprobieren (pro Server-Instanz)
-const attempts = new Map<string, number[]>();
-function tooMany(key: string) {
-  const now = Date.now();
-  const list = (attempts.get(key) ?? []).filter((t) => now - t < 10 * 60000);
-  list.push(now);
-  attempts.set(key, list);
-  if (attempts.size > 10000) attempts.clear();
-  return list.length > 10;
-}
-
 export async function loginAction(_: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const password = String(formData.get("password") ?? "");
   const code = String(formData.get("code") ?? "").trim();
-  if (tooMany(email)) return { error: "Zu viele Versuche. Bitte in einigen Minuten erneut versuchen.", needsCode: Boolean(code) };
+
+  // Sperre und Fehlversuche verwaltet login-guard (gilt auch im Credentials-Endpoint von Auth.js)
+  const user = await db.user.findUnique({ where: { email } });
+  if (user && isLocked(user)) return { error: lockedMessage, needsCode: Boolean(code) };
 
   // Schritt 1: Passwort prüfen – bei aktivierter Zwei-Faktor-Anmeldung zuerst den Code abfragen
-  const user = await db.user.findUnique({ where: { email } });
-  if (user?.passwordHash && user.totpEnabled && !code && (await bcrypt.compare(password, user.passwordHash))) {
-    return { needsCode: true };
+  if (user?.passwordHash && user.totpEnabled && !code) {
+    const result = await checkPassword(user, password);
+    if (result === "ok") return { needsCode: true };
+    return { error: result === "locked" ? lockedMessage : "E-Mail oder Passwort ist falsch." };
   }
   try {
     await signIn("credentials", { email, password, code, redirectTo: safeCallback(formData.get("callbackUrl")) });
   } catch (e) {
     if (e instanceof AuthError) {
+      const now = await db.user.findUnique({ where: { email }, select: { lockedUntil: true } });
+      if (now && isLocked(now)) return { error: lockedMessage, needsCode: Boolean(code) };
       return code ? { error: "Der Code ist ungültig oder abgelaufen.", needsCode: true } : { error: "E-Mail oder Passwort ist falsch." };
     }
     throw e;
@@ -65,6 +62,7 @@ export async function registerAction(_: FormState, formData: FormData): Promise<
   const user = await db.user.create({
     data: { name, email, passwordHash: await bcrypt.hash(password, 12) },
   });
+  await sendVerificationMail(user).catch((e) => console.error("Bestätigungs-Mail fehlgeschlagen", e));
 
   // Wer über eine Einladung kommt, bekommt keine eigene Instanz aufgezwungen
   const callbackUrl = safeCallback(formData.get("callbackUrl"));
@@ -73,6 +71,23 @@ export async function registerAction(_: FormState, formData: FormData): Promise<
   }
 
   await signIn("credentials", { email, password, redirectTo: callbackUrl });
+}
+
+export async function resendVerification(): Promise<FormState> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Bitte zuerst anmelden." };
+  const user = await db.user.findUnique({ where: { id: session.user.id }, select: { email: true, emailVerified: true } });
+  if (!user) return { error: "Bitte zuerst anmelden." };
+  try {
+    const result = await sendVerificationMail(user);
+    if (result === "verified") return { ok: "Deine E-Mail-Adresse ist bereits bestätigt." };
+    if (result === "disabled") return { error: "Auf diesem Server ist kein E-Mail-Versand eingerichtet. Bitte wende dich an den Administrator." };
+    if (result === "throttled") return { error: "Eine E-Mail wurde gerade erst gesendet. Bitte warte eine Minute." };
+    return { ok: `Bestätigungslink an ${user.email} gesendet.` };
+  } catch (e) {
+    console.error("Bestätigungs-Mail fehlgeschlagen", e);
+    return { error: "Die E-Mail konnte nicht gesendet werden." };
+  }
 }
 
 export async function socialSignIn(formData: FormData) {
