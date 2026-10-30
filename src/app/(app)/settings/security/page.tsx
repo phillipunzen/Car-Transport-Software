@@ -7,7 +7,8 @@ import { Card, PageHeader } from "@/components/ui";
 import { SettingsNav } from "@/components/settings-nav";
 import { SubmitButton } from "@/components/submit-button";
 import { TwoFactor } from "@/components/two-factor";
-import { setRequire2fa } from "./actions";
+import { ActionForm } from "@/components/action-form";
+import { changePassword, setRequire2fa } from "./actions";
 
 export const metadata = { title: "Sicherheit" };
 
@@ -17,14 +18,42 @@ export default async function SecurityPage() {
   const settlements = ctx.org.moduleDriverPay
     ? await db.driverSettlement.findMany({ where: { organizationId: ctx.orgId, userId: ctx.user.id }, orderBy: { createdAt: "desc" }, take: 12 })
     : [];
+  const hasPassword = Boolean((await db.user.findUnique({ where: { id: ctx.user.id }, select: { passwordHash: true } }))?.passwordHash);
   return (
     <>
       <PageHeader title={driver ? "Profil & Sicherheit" : "Einstellungen"} subtitle={`${ctx.user.name ?? ctx.user.email} · ${ROLE[ctx.role]}`} />
       <SettingsNav active="security" driver={driver} fleet={ctx.org.moduleFleet} />
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Zwei-Faktor-Anmeldung" className="lg:col-span-2">
-          <TwoFactor enabled={ctx.user.totpEnabled} />
-        </Card>
+        <div className="space-y-6 lg:col-span-2">
+          <Card title={hasPassword ? "Passwort ändern" : "Passwort festlegen"}>
+            <ActionForm action={changePassword} className="max-w-md space-y-4">
+              {hasPassword ? (
+                <div>
+                  <label htmlFor="current">Aktuelles Passwort</label>
+                  <input id="current" name="current" type="password" autoComplete="current-password" required className="input" />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">Du meldest dich bisher nur über Google oder Apple an. Mit einem Passwort geht es zusätzlich per E-Mail.</p>
+              )}
+              <div>
+                <label htmlFor="password">Neues Passwort</label>
+                <input id="password" name="password" type="password" autoComplete="new-password" required minLength={8} className="input" />
+                <p className="mt-1 text-xs text-slate-500">Mindestens 8 Zeichen.</p>
+              </div>
+              <div>
+                <label htmlFor="confirm">Neues Passwort wiederholen</label>
+                <input id="confirm" name="confirm" type="password" autoComplete="new-password" required minLength={8} className="input" />
+              </div>
+              <p className="text-xs text-slate-500">Danach meldest du dich neu an. Auf allen anderen Geräten wirst du abgemeldet.</p>
+              <SubmitButton className="btn-primary" pendingText="Wird gespeichert…">
+                Passwort speichern
+              </SubmitButton>
+            </ActionForm>
+          </Card>
+          <Card title="Zwei-Faktor-Anmeldung">
+            <TwoFactor enabled={ctx.user.totpEnabled} />
+          </Card>
+        </div>
         <div className="space-y-6">
           {ctx.org.moduleDriverPay && settlements.length > 0 && (
             <Card title="Meine Abrechnungen">

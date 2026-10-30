@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { loginAction, type LoginState } from "../actions";
 
 /** Anmeldung mit optionalem zweiten Schritt (Code aus der Authenticator-App). */
-export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
+export function LoginForm({ callbackUrl, defaultEmail = "" }: { callbackUrl?: string; defaultEmail?: string }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(loginAction, undefined);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const step2 = Boolean(state?.needsCode);
   return (
@@ -18,7 +19,12 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
           <input id="email" name="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
         </div>
         <div>
-          <label htmlFor="password">Passwort</label>
+          <div className="flex items-baseline justify-between gap-2">
+            <label htmlFor="password">Passwort</label>
+            <Link href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`} className="text-xs font-medium text-brand-600">
+              Passwort vergessen?
+            </Link>
+          </div>
           <input id="password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
         </div>
       </div>

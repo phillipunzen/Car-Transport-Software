@@ -15,20 +15,21 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?   @db.Text
-  passwordHash  String?
-  calendarToken String?   @unique // geheimer Link für das Kalender-Abo (ICS)
-  totpSecret    String? // Zwei-Faktor-Anmeldung (TOTP), Base32
-  totpEnabled   Boolean   @default(false)
-  recoveryCodes Json? // gehashte Wiederherstellungscodes
-  failedLogins  Int       @default(0) // aufeinanderfolgende Fehlversuche (Passwort/Code)
-  lockedUntil   DateTime? // Anmeldung gesperrt bis
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  name              String?
+  email             String    @unique
+  emailVerified     DateTime?
+  image             String?   @db.Text
+  passwordHash      String?
+  calendarToken     String?   @unique // geheimer Link für das Kalender-Abo (ICS)
+  totpSecret        String? // Zwei-Faktor-Anmeldung (TOTP), Base32
+  totpEnabled       Boolean   @default(false)
+  recoveryCodes     Json? // gehashte Wiederherstellungscodes
+  failedLogins      Int       @default(0) // aufeinanderfolgende Fehlversuche (Passwort/Code)
+  lockedUntil       DateTime? // Anmeldung gesperrt bis
+  passwordChangedAt DateTime? // ältere Sitzungen werden danach abgemeldet
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   accounts           Account[]
   sessions           Session[]

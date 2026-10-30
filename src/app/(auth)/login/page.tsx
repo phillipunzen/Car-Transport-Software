@@ -10,8 +10,8 @@ const ERRORS: Record<string, string> = {
   EmailNotVerified: "Der Anbieter hat keine bestätigte E-Mail-Adresse übermittelt. Bitte bestätige die Adresse dort oder melde dich mit E-Mail und Passwort an.",
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
-  const { callbackUrl, error } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string; reset?: string; changed?: string; email?: string }> }) {
+  const { callbackUrl, error, reset, changed, email } = await searchParams;
   return (
     <div className="card card-body space-y-4">
       <h1 className="text-lg font-semibold">Anmelden</h1>
@@ -20,8 +20,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           {ERRORS[error] ?? "Die Anmeldung ist fehlgeschlagen. Bitte versuche es erneut."}
         </div>
       )}
+      {(reset || changed) && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Dein Passwort wurde geändert. Bitte melde dich mit dem neuen Passwort an – auf anderen Geräten bist du abgemeldet.
+        </div>
+      )}
       <SocialButtons callbackUrl={callbackUrl} />
-      <LoginForm callbackUrl={error === "AccountNotLinked" ? "/verify-email" : callbackUrl} />
+      <LoginForm callbackUrl={error === "AccountNotLinked" ? "/verify-email" : callbackUrl} defaultEmail={email} />
       <p className="text-center text-sm text-slate-500">
         Noch kein Konto?{" "}
         <Link href={`/register${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`} className="font-medium text-brand-600">

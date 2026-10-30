@@ -5,3 +5,10 @@ declare module "next-auth" {
     user: { id: string } & DefaultSession["user"];
   }
 }
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    /** Zeitpunkt der Anmeldung (ms) – für das Abmelden nach Passwortänderung */
+    authAt?: number;
+  }
+}

@@ -2,12 +2,15 @@
 
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth, signIn } from "@/auth";
 import { db } from "@/lib/db";
 import { createOrganizationForUser } from "@/lib/org";
 import { checkPassword, isLocked, lockedMessage } from "@/lib/login-guard";
 import { sendVerificationMail } from "@/lib/email-verification";
+import { mailEnabled } from "@/lib/mail";
+import { PasswordSchema, resetPassword, sendPasswordResetMail } from "@/lib/password-reset";
 import type { FormState } from "@/components/action-form";
 
 const safeCallback = (v: FormDataEntryValue | null) => {
@@ -88,6 +91,27 @@ export async function resendVerification(): Promise<FormState> {
     console.error("Bestätigungs-Mail fehlgeschlagen", e);
     return { error: "Die E-Mail konnte nicht gesendet werden." };
   }
+}
+
+/** Immer dieselbe Antwort – ob es ein Konto zur Adresse gibt, bleibt verborgen. */
+export async function requestPasswordReset(_: FormState, formData: FormData): Promise<FormState> {
+  const email = z.string().trim().toLowerCase().email().safeParse(formData.get("email"));
+  if (!email.success) return { error: "Bitte gib eine gültige E-Mail-Adresse an." };
+  if (!mailEnabled()) {
+    return { error: "Auf diesem Server ist kein E-Mail-Versand eingerichtet. Bitte wende dich an den Administrator." };
+  }
+  // Nicht abwarten: Sonst verriete die Antwortzeit, ob eine E-Mail verschickt wurde
+  void sendPasswordResetMail(email.data).catch((e) => console.error("Mail zum Zurücksetzen fehlgeschlagen", e));
+  return { ok: `Falls es ein Konto für ${email.data} gibt, ist ein Link zum Zurücksetzen unterwegs. Bitte schau auch im Spam-Ordner nach.` };
+}
+
+export async function resetPasswordAction(_: FormState, formData: FormData): Promise<FormState> {
+  const password = PasswordSchema.safeParse(formData.get("password"));
+  if (!password.success) return { error: password.error.issues[0].message };
+  if (formData.get("password") !== formData.get("confirm")) return { error: "Die beiden Passwörter stimmen nicht überein." };
+  const email = await resetPassword(String(formData.get("token") ?? ""), password.data);
+  if (!email) return { error: "Der Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere einen neuen an." };
+  redirect(`/login?reset=1&email=${encodeURIComponent(email)}`);
 }
 
 export async function socialSignIn(formData: FormData) {

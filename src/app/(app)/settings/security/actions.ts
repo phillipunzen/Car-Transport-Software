@@ -5,6 +5,10 @@ import QRCode from "qrcode";
 import { db } from "@/lib/db";
 import { canManage, requireCtx } from "@/lib/org";
 import { newRecoveryCodes, newTotpSecret, otpauthUrl, verifyTotp } from "@/lib/totp";
+import { signOut } from "@/auth";
+import { checkPassword, lockedMessage } from "@/lib/login-guard";
+import { PasswordSchema, hashPassword } from "@/lib/password-reset";
+import type { FormState } from "@/components/action-form";
 
 export type TwoFactorState = { error?: string; ok?: string; secret?: string; qr?: string; codes?: string[] } | undefined;
 
@@ -58,4 +62,27 @@ export async function setRequire2fa(formData: FormData) {
   if (!canManage(ctx.role)) throw new Error("Keine Berechtigung");
   await db.organization.update({ where: { id: ctx.orgId }, data: { require2fa: formData.get("require2fa") === "on" } });
   revalidatePath("/", "layout");
+}
+
+/**
+ * Passwort ändern (bzw. erstmals festlegen bei Konten nur mit Google/Apple).
+ * Falsche aktuelle Passwörter zählen zur Login-Sperre. Danach sind alle Sitzungen abgemeldet.
+ */
+export async function changePassword(_: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireCtx();
+  const user = await db.user.findUniqueOrThrow({ where: { id: ctx.user.id } });
+  if (user.passwordHash) {
+    const result = await checkPassword(user, String(formData.get("current") ?? ""));
+    if (result === "locked") return { error: lockedMessage };
+    if (result === "wrong") return { error: "Das aktuelle Passwort stimmt nicht." };
+  }
+  const password = PasswordSchema.safeParse(formData.get("password"));
+  if (!password.success) return { error: password.error.issues[0].message };
+  if (formData.get("password") !== formData.get("confirm")) return { error: "Die beiden neuen Passwörter stimmen nicht überein." };
+  await db.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await hashPassword(password.data), passwordChangedAt: new Date(), failedLogins: 0, lockedUntil: null },
+  });
+  await signOut({ redirectTo: `/login?changed=1&email=${encodeURIComponent(user.email)}` });
+  return undefined;
 }

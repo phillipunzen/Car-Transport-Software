@@ -9,6 +9,7 @@ import { createOrganizationForUser } from "@/lib/org";
 import { consumeRecoveryCode, verifyTotp } from "@/lib/totp";
 import { checkPassword, recordFailedLogin, resetFailedLogins } from "@/lib/login-guard";
 import { oauthSignInCheck } from "@/lib/oauth-linking";
+import { startedBeforePasswordChange } from "@/lib/password-reset";
 
 const providers: NextAuthConfig["providers"] = [
   Credentials({
@@ -64,8 +65,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn({ user, account, profile }) {
       return oauthSignInCheck({ user, account, profile });
     },
-    jwt({ token, user }) {
-      if (user?.id) token.sub = user.id;
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+        token.authAt = Date.now();
+        return token;
+      }
+      // Nach einer Passwortänderung gelten nur noch Sitzungen, die danach begonnen haben
+      if (token.sub) {
+        const current = await db.user.findUnique({ where: { id: token.sub }, select: { passwordChangedAt: true } });
+        if (!current || startedBeforePasswordChange(token, current.passwordChangedAt)) return null;
+      }
       return token;
     },
     session({ session, token }) {
