@@ -5,7 +5,12 @@ import { z } from "zod";
 /** KI-Erkennung für Fahrzeugdaten und Belege über die Claude-API. */
 export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
-export const aiModel = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+export const aiModel = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+
+// Serverseitiges Ausweichen bei Ablehnungen gibt es nur für diese Modelle (Haiku z. B. nicht)
+const fallbackOptions = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(aiModel)
+  ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+  : {};
 
 let client: Anthropic | undefined;
 const anthropic = () => (client ??= new Anthropic());
@@ -26,8 +31,7 @@ async function extract<S extends z.ZodType>(files: Input[], instruction: string,
     model: aiModel,
     max_tokens: 4000,
     output_config: { effort: "low", format: betaZodOutputFormat(schema) },
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...fallbackOptions,
     messages: [{ role: "user", content: [...files.map(toContent), { type: "text", text: instruction }] }],
   });
   if (response.stop_reason === "refusal") throw new Error("Die Erkennung wurde abgelehnt.");

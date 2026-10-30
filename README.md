@@ -184,7 +184,7 @@ Die Anwendung wählt die Erkennungsmethode automatisch anhand der Server-Konfigu
 | Kennzeichen | wenn formatfüllend fotografiert | auch auf Fahrzeugfotos |
 | Belege | PDFs mit Textebene sehr gut; Fotos: Betrag, Datum, USt meist, Aussteller/Kategorie über bekannte Anbieter (DB, Aral, Motel One …) | sehr gut, auch zerknitterte Bons |
 
-Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen scharf und formatfüllend fotografieren. Schatten und leichte Schräglage gleicht die Aufbereitung aus; stark verwackelte Fotos bleiben schwierig. Beim Fahrzeugschein wird der feste Aufbau der Zulassungsbescheinigung Teil I ausgewertet (Felder A, B, D.1, D.3, E), die Plausibilität der FIN geprüft (Herstellerkennung, Prüfziffer) – unsichere Werte bleiben lieber leer als falsch. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-opus-5-5`).
+Tipps für die lokale OCR: Fahrzeugschein, FIN-Plakette oder Kennzeichen scharf und formatfüllend fotografieren. Schatten und leichte Schräglage gleicht die Aufbereitung aus; stark verwackelte Fotos bleiben schwierig. Beim Fahrzeugschein wird der feste Aufbau der Zulassungsbescheinigung Teil I ausgewertet (Felder A, B, D.1, D.3, E), die Plausibilität der FIN geprüft (Herstellerkennung, Prüfziffer) – unsichere Werte bleiben lieber leer als falsch. Mit `OCR_ENABLED=false` lässt sich die lokale Erkennung abschalten. Das KI-Modell ist über `ANTHROPIC_MODEL` änderbar (Standard `claude-sonnet-5-5`). Ein Vergleich der Modelle auf künstlichen Fahrzeugscheinen läuft mit `RUN_AI_EVAL=1 npx vitest run tests/recognition-eval.test.ts` (verbraucht API-Guthaben, Bericht in `data/recognition-eval.md`).
 
 ### Standort & Streckenberechnung
 
