@@ -47,3 +47,18 @@
 @utility btn-ghost {
   @apply btn text-slate-600 hover:bg-slate-100;
 }
+
+/* Hintergrundszene der Anmeldeseiten (auth-scene.tsx) */
+@keyframes scene-trail {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes scene-pulse {
+  0% { transform: scale(0.4); opacity: 0.9; }
+  70%, 100% { transform: scale(1.6); opacity: 0; }
+}
+.scene-trail { stroke-dasharray: 26 974; animation: scene-trail 16s linear infinite; }
+.scene-pulse { transform-box: fill-box; transform-origin: center; animation: scene-pulse 3.2s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .scene-trail, .scene-pulse { animation-play-state: paused; }
+}

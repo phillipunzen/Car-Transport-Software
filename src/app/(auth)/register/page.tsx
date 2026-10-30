@@ -12,7 +12,10 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const invited = callbackUrl?.startsWith("/invite/");
   return (
     <div className="card card-body space-y-4">
-      <h1 className="text-lg font-semibold">Konto erstellen</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Konto erstellen</h1>
+        <p className="mt-1 text-sm text-slate-500">{invited ? "Danach landest du direkt im Team, das dich eingeladen hat." : "Firmendaten kannst du später in den Einstellungen ergänzen."}</p>
+      </div>
       <SocialButtons callbackUrl={callbackUrl} />
       <ActionForm action={registerAction}>
         <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />

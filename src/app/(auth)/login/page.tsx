@@ -14,7 +14,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { callbackUrl, error, reset, changed, email } = await searchParams;
   return (
     <div className="card card-body space-y-4">
-      <h1 className="text-lg font-semibold">Anmelden</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Willkommen zurück</h1>
+        <p className="mt-1 text-sm text-slate-500">Melde dich an, um deine Aufträge zu sehen.</p>
+      </div>
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {ERRORS[error] ?? "Die Anmeldung ist fehlgeschlagen. Bitte versuche es erneut."}
